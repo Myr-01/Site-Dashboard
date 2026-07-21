@@ -1,0 +1,10 @@
+server/backups
+server/site-backups
+server/uploads
+server/temp
+server/node_modules
+*.wpress
+*.db
+*.db-shm
+*.db-wal
+node_modules

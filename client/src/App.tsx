@@ -27,8 +27,8 @@ function App() {
   const { withAuth, showAuthModal, onAuthSuccess, onAuthClose } = useAuth();
 
   useEffect(() => {
-    // ZeroTier üçün server URL-ni environment variable-dan və ya hardcode-dan götür
-    const serverUrl = import.meta.env.VITE_SERVER_URL || window.location.origin;
+    // Backend URL: VITE_API_URL env var varsa onu istifadə et, yoxsa current origin
+    const serverUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_SERVER_URL || window.location.origin;
     const s = io(serverUrl, { 
       transports: ['websocket', 'polling'],
       reconnection: true,
