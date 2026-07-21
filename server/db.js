@@ -1,9 +1,23 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, 'monitor.db');
+
+// Railway persistent volume: DATA_DIR env var qoyulubsa onu istifadə et,
+// yoxsa lokal __dirname (development)
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : __dirname;
+
+// Qovluğu yarat (yoxdursa)
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const dbPath = path.join(DATA_DIR, 'monitor.db');
+console.log(`SQLite path: ${dbPath}`);
 
 const db = new sqlite3.Database(dbPath);
 
@@ -180,3 +194,4 @@ export async function initDb() {
 }
 
 export default db;
+export { DATA_DIR, dbPath };

@@ -1,2 +1,36 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment variables (şifrə saxlayır!)
+server/.env
+client/.env
+.env
+
+# SQLite database
+server/monitor.db
+server/monitor.db-shm
+server/monitor.db-wal
+
+# Backups (böyük fayllar)
+server/backups/
 server/site-backups/
+server/uploads/
+server/temp/
+
+# Backup file formats
 *.wpress
+*.db-shm
+*.db-wal
+
+# Build output
+client/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db

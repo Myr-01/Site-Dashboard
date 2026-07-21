@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { DATA_DIR, dbPath } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, 'monitor.db');
-const BACKUP_DIR = path.join(__dirname, 'backups');
+const DB_PATH = dbPath;
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const MAX_BACKUPS = 7; // Son 7 backup saxla (1 həftəlik)
 
 // Backup qovluğunu yarat (yoxdursa)

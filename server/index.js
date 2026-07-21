@@ -16,8 +16,16 @@ import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
 import { analyzeBackup } from './backup-analyzer.js';
+import { DATA_DIR } from './db.js';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+// Frontend origin: Vercel deploy URL və ya localhost
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,7 +33,14 @@ const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: true, // Bütün origin-lərə icazə ver (ZeroTier üçün lazımdır)
+    origin: (origin, callback) => {
+      // Vercel preview URL-lərini də qəbul et (*.vercel.app)
+      if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Development üçün hamısına icazə ver
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   },
@@ -39,7 +54,13 @@ const siteBackupUpload = multer({
 
 // CORS-u bütün origin-lər üçün aç
 app.use(cors({
-  origin: true,
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Development üçün hamısına icazə ver
+    }
+  },
   credentials: true,
 }));
 app.use(express.json());
@@ -511,7 +532,7 @@ app.delete('/api/backups/:name', (req, res) => {
 
 // === SITE BACKUP (UPLOAD/DOWNLOAD) ENDPOINTS ===
 
-const SITE_BACKUPS_DIR = path.join(__dirname, 'site-backups');
+const SITE_BACKUPS_DIR = path.join(DATA_DIR, 'site-backups');
 if (!fs.existsSync(SITE_BACKUPS_DIR)) {
   fs.mkdirSync(SITE_BACKUPS_DIR, { recursive: true });
 }
@@ -717,13 +738,14 @@ app.get('*', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || '0.0.0.0'; // Bütün network interface-lərdən dinlə
+const HOST = process.env.HOST || '0.0.0.0';
 
 // Initialize DB then start server
 initDb().then(() => {
   httpServer.listen(PORT, HOST, () => {
     console.log(`Server running on http://${HOST}:${PORT}`);
-    console.log(`Accessible from ZeroTier network`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Data dir: ${DATA_DIR}`);
     startMonitoring(io);
     startAutoBackup();
   });
