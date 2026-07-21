@@ -1,0 +1,125 @@
+import { Site } from '../types';
+
+interface SiteCardProps {
+  site: Site;
+  onDelete: (id: number) => void;
+  onSelect: (site: Site) => void;
+}
+
+function getSeoScore(check: Site['latestCheck']): number {
+  if (!check) return 0;
+  let score = 0;
+  if (check.seo_title === 'yes') score++;
+  if (check.seo_description === 'yes') score++;
+  if (check.seo_h1 === 'yes') score++;
+  if (check.seo_robots && !check.seo_robots.includes('noindex')) score++;
+  if (check.seo_canonical === 'yes') score++;
+  return score;
+}
+
+function formatTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr + 'Z');
+  return date.toLocaleString();
+}
+
+export default function SiteCard({ site, onDelete, onSelect }: SiteCardProps) {
+  const check = site.latestCheck;
+  const isOnline = check?.status === 'online';
+  const seoScore = getSeoScore(check);
+
+  return (
+    <div
+      className="bg-navy-surface border border-border rounded-xl p-5 cursor-pointer hover:border-accent/50 hover:shadow-lg hover:shadow-accent/5 transition-all duration-200 group"
+      onClick={() => onSelect(site)}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-heading font-semibold text-white truncate group-hover:text-accent transition-colors">
+            {site.name}
+          </h3>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-text-muted text-xs truncate">{site.url}</p>
+            {site.group_name && (
+              <span className="flex-shrink-0 px-1.5 py-0.5 text-xs bg-accent/10 text-accent rounded border border-accent/20">
+                {site.group_name}
+              </span>
+            )}
+          </div>
+        </div>
+        <span
+          className={`ml-2 px-2 py-0.5 text-xs font-bold rounded-full whitespace-nowrap flex items-center gap-1.5 ${
+            isOnline
+              ? 'bg-green-400/10 text-green-400'
+              : 'bg-red-400/10 text-red-400'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-400' : 'bg-red-400'} ${isOnline ? 'animate-pulse' : ''}`}></span>
+          {isOnline ? 'ONLINE' : 'OFFLINE'}
+        </span>
+      </div>
+
+      {/* Metrics */}
+      {check ? (
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div>
+            <span className="text-text-muted text-xs">HTTP</span>
+            <p className="text-white font-medium">{check.http_code || '—'}</p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">Response</span>
+            <p className="text-white font-medium">{check.response_time ? `${check.response_time}ms` : '—'}</p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">SSL</span>
+            <p className={`font-medium ${check.ssl_valid === 1 ? 'text-green-400' : check.ssl_valid === 0 ? 'text-red-400' : 'text-text-muted'}`}>
+              {check.ssl_valid === 1
+                ? `Valid (${check.ssl_days_remaining}d)`
+                : check.ssl_valid === 0
+                ? 'Invalid'
+                : 'N/A'}
+            </p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">Uptime (30d)</span>
+            <p className="text-white font-medium">{site.uptime !== null ? `${site.uptime}%` : '—'}</p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">Domain Expiry</span>
+            <p className={`font-medium text-xs ${
+              (() => {
+                // Manual tarix varsa onu istifadə et, yoxdursa WHOIS-dən
+                const expiry = site.manual_domain_expiry || check.domain_expiry;
+                if (!expiry) return 'text-text-muted';
+                const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                return days <= 30 ? 'text-red-400' : days <= 90 ? 'text-yellow-400' : 'text-green-400';
+              })()
+            }`}>
+              {(() => {
+                const expiry = site.manual_domain_expiry || check.domain_expiry;
+                if (!expiry) return '—';
+                const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                return `${days} gün qalıb`;
+              })()}
+            </p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">Hosting</span>
+            <p className="text-accent font-medium text-xs">{check.hosting_provider || '—'}</p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">SEO Score</span>
+            <p className="text-accent font-medium">{seoScore}/5</p>
+          </div>
+          <div>
+            <span className="text-text-muted text-xs">Last Check</span>
+            <p className="text-white font-medium text-xs">{formatTime(check.checked_at)}</p>
+          </div>
+        </div>
+      ) : (
+        <p className="text-text-muted text-sm">Waiting for first check...</p>
+      )}
+    </div>
+  );
+}
