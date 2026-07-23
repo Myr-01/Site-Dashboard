@@ -2,9 +2,13 @@ import axios from 'axios';
 import sslChecker from 'ssl-checker';
 import * as cheerio from 'cheerio';
 import dns from 'dns/promises';
-import whois from 'whois-json';
+import { createRequire } from 'module';
 import { dbAll, dbGet, dbRun } from './db.js';
 import { sendDowntimeAlert } from './mailer.js';
+
+// whois-json CJS paketidir — ESM mühitində createRequire ilə yükləyirik
+const require = createRequire(import.meta.url);
+const whois = require('whois-json');
 
 // Default webhook message template
 const DEFAULT_TEMPLATE = '⚠️ **Sayt Offline Oldu**\n\n**Sayt:** {name}\n**URL:** {url}\n**Status:** {status}\n**Vaxt:** {time}';
