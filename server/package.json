@@ -20,5 +20,8 @@
     "sqlite3": "^5.1.7",
     "ssl-checker": "^2.0.8",
     "whois-json": "^2.0.4"
+  },
+  "overrides": {
+    "whois": "2.15.0"
   }
 }
