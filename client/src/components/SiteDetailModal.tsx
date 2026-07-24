@@ -833,7 +833,7 @@ function EditableRow({
   label, displayValue, onEdit,
 }: {
   label: string;
-  value: string | null;
+  value: string | null | undefined;
   displayValue: React.ReactNode;
   onEdit: () => void;
 }) {
