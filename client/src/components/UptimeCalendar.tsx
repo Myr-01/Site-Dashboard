@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiUrl } from '../api';
 
 interface UptimeCalendarProps {
   siteId: number;
@@ -16,7 +17,7 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/sites/${siteId}/history`)
+    fetch(apiUrl(`/api/sites/${siteId}/history`))
       .then(res => res.json())
       .then((history: any[]) => {
         const daysAgo = Date.now() - days * 24 * 60 * 60 * 1000;

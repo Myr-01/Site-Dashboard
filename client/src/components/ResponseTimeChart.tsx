@@ -11,6 +11,7 @@ import {
   Legend,
   Filler,
 } from 'chart.js';
+import { apiUrl } from '../api';
 
 ChartJS.register(
   CategoryScale,
@@ -37,7 +38,7 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/sites/${siteId}/history`)
+    fetch(apiUrl(`/api/sites/${siteId}/history`))
       .then(res => res.json())
       .then((history: CheckHistory[]) => {
         // Son 24 saatlık dataları filtrələ

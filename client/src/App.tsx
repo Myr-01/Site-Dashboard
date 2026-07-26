@@ -11,6 +11,7 @@ import FloatingToolbar from './components/FloatingToolbar';
 import WorldMap from './components/WorldMap';
 import AuthModal from './components/AuthModal';
 import { useAuth } from './useAuth';
+import { apiUrl } from './api';
 
 function App() {
   const [sites, setSites] = useState<Site[]>([]);
@@ -67,7 +68,7 @@ function App() {
 
   const fetchSites = useCallback(async () => {
     try {
-      const res = await fetch('/api/sites');
+      const res = await fetch(apiUrl('/api/sites'));
       const data = await res.json();
       setSites(data);
     } catch (err) {
@@ -82,7 +83,7 @@ function App() {
   const handleDelete = async (id: number) => {
     try {
       const pass = sessionStorage.getItem('adminPassword');
-      await fetch(`/api/sites/${id}`, {
+      await fetch(apiUrl(`/api/sites/${id}`), {
         method: 'DELETE',
         headers: pass ? { 'x-admin-password': pass } : {},
       });

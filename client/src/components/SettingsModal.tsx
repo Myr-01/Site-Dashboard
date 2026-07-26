@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { SmtpSettings, WebhookSettings } from '../types';
 import { authHeaders } from '../useAuth';
 import { dialog } from './Dialog';
+import { apiUrl } from '../api';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -34,7 +35,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    fetch('/api/settings/email')
+    fetch(apiUrl('/api/settings/email'))
       .then(res => res.json())
       .then(data => {
         if (data.host) {
@@ -43,7 +44,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       })
       .catch(() => {});
 
-    fetch('/api/settings/webhooks')
+    fetch(apiUrl('/api/settings/webhooks'))
       .then(res => res.json())
       .then(data => {
         if (data.telegram_webhook || data.discord_webhook || data.discord_user_id || data.message_template) {
@@ -64,7 +65,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     setMessage('');
 
     try {
-      const res = await fetch('/api/settings/email', {
+      const res = await fetch(apiUrl('/api/settings/email'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(settings),
@@ -93,7 +94,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     };
 
     try {
-      const res = await fetch('/api/settings/webhooks', {
+      const res = await fetch(apiUrl('/api/settings/webhooks'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(cleanWebhooks),
@@ -115,7 +116,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     setMessage('');
 
     try {
-      const res = await fetch('/api/settings/test-email', { method: 'POST' });
+      const res = await fetch(apiUrl('/api/settings/test-email'), { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Test email göndərilmədi');
       setMessage('Test email uğurla göndərildi!');
@@ -325,7 +326,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     setTestLoading(true);
                     setMessage('');
                     try {
-                      const testRes = await fetch('/api/settings/test-webhook', { 
+                      const testRes = await fetch(apiUrl('/api/settings/test-webhook'), { 
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(webhooks),
@@ -384,7 +385,7 @@ function BackupTab() {
 
   const fetchBackups = async () => {
     try {
-      const res = await fetch('/api/backups');
+      const res = await fetch(apiUrl('/api/backups'));
       const data = await res.json();
       setBackups(data);
     } catch {
@@ -396,7 +397,7 @@ function BackupTab() {
     setLoading(true);
     setMessage('');
     try {
-      const res = await fetch('/api/backups', { method: 'POST' });
+      const res = await fetch(apiUrl('/api/backups'), { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMessage('Backup uğurla yaradıldı!');
@@ -418,7 +419,7 @@ function BackupTab() {
     setLoading(true);
     setMessage('');
     try {
-      const res = await fetch(`/api/backups/${name}/restore`, { method: 'POST' });
+      const res = await fetch(apiUrl(`/api/backups/${name}/restore`), { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setMessage('Backup bərpa edildi! Səhifəni yeniləyin.');
@@ -434,7 +435,7 @@ function BackupTab() {
     const ok = await dialog.confirm(`"${name}" backup-ını silmək istəyirsiniz?`, 'Backup Silinsin?', true);
     if (!ok) return;
     try {
-      const res = await fetch(`/api/backups/${name}`, { method: 'DELETE' });
+      const res = await fetch(apiUrl(`/api/backups/${name}`), { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       fetchBackups();

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { authHeaders } from '../useAuth';
+import { apiUrl } from '../api';
 
 interface AddSiteModalProps {
   onClose: () => void;
@@ -18,7 +19,7 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
     setError('');
 
     try {
-      const res = await fetch('/api/sites', {
+      const res = await fetch(apiUrl('/api/sites'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ name, url }),

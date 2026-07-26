@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { authHeaders } from '../useAuth';
+import { apiUrl } from '../api';
 
 interface ImportModalProps {
   onClose: () => void;
@@ -27,7 +28,7 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch('/api/import', {
+      const res = await fetch(apiUrl('/api/import'), {
         method: 'POST',
         headers: { ...authHeaders() },
         body: formData,

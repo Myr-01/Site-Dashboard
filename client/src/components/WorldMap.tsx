@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { apiUrl } from '../api';
 
 interface SiteLocation {
   id: number;
@@ -26,7 +27,7 @@ export default function WorldMap() {
 
   const fetchLocations = async () => {
     try {
-      const res = await fetch('/api/sites/locations');
+      const res = await fetch(apiUrl('/api/sites/locations'));
       const data = await res.json();
       setLocations(data);
     } catch (err) {

@@ -4,6 +4,7 @@ import ResponseTimeChart from './ResponseTimeChart';
 import UptimeCalendar from './UptimeCalendar';
 import { authHeaders } from '../useAuth';
 import { dialog } from './Dialog';
+import { apiUrl } from '../api';
 
 interface SiteDetailModalProps {
   site: Site;
@@ -123,7 +124,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   // Saxlandıqdan sonra site datasını yenilə (reload yox)
   const refreshSite = async () => {
     try {
-      const res = await fetch('/api/sites');
+      const res = await fetch(apiUrl('/api/sites'));
       const all: Site[] = await res.json();
       const updated = all.find(s => s.id === site.id);
       if (updated) setSite(updated);
@@ -140,21 +141,21 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
   const fetchSiteInfo = async () => {
     try {
-      const res = await fetch(`/api/sites/${site.id}/info`);
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/info`));
       setSiteInfo(await res.json());
     } catch {}
   };
 
   const fetchIncidents = async () => {
     try {
-      const res = await fetch(`/api/sites/${site.id}/incidents`);
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/incidents`));
       setIncidents(await res.json());
     } catch {}
   };
 
   const fetchReport = async () => {
     try {
-      const res = await fetch(`/api/sites/${site.id}/report`);
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/report`));
       setReport(await res.json());
     } catch {}
   };
@@ -169,7 +170,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
         pass = entered as string;
         sessionStorage.setItem('adminPassword', pass);
       }
-      await fetch(`/api/sites/${site.id}/meta`, {
+      await fetch(apiUrl(`/api/sites/${site.id}/meta`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-password': pass },
         body: JSON.stringify({ notes: notesValue, group_name: groupValue }),
@@ -185,7 +186,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
   const fetchBackups = async () => {
     try {
-      const res = await fetch(`/api/sites/${site.id}/backups`);
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/backups`));
       setBackups(await res.json());
     } catch {}
   };
@@ -197,7 +198,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`/api/sites/${site.id}/backups`, { method: 'POST', body: formData, headers: { ...authHeaders() } });
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/backups`), { method: 'POST', body: formData, headers: { ...authHeaders() } });
       if (!res.ok) throw new Error('Upload uğursuz oldu');
       fetchBackups();
       fetchSiteInfo();
@@ -212,7 +213,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const handleDeleteBackup = async (name: string) => {
     const ok = await dialog.confirm(`"${name}" backup-ını silmək istəyirsiniz?`, 'Backup Silinsin?', true);
     if (!ok) return;
-    await fetch(`/api/sites/${site.id}/backups/${name}`, { method: 'DELETE', headers: { ...authHeaders() } });
+    await fetch(apiUrl(`/api/sites/${site.id}/backups/${name}`), { method: 'DELETE', headers: { ...authHeaders() } });
     fetchBackups();
   };
 
@@ -766,7 +767,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
               sessionStorage.setItem('adminPassword', pass);
             }
             // Yoxla
-            const authRes = await fetch('/api/auth/verify', {
+            const authRes = await fetch(apiUrl('/api/auth/verify'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ password: pass }),
@@ -786,7 +787,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
             if (editField.field === 'domain_expiry') body.manual_domain_expiry = newValue || null;
             if (editField.field === 'hosting_expiry') body.manual_hosting_expiry = newValue || null;
 
-            await fetch(`/api/sites/${site.id}/manual-dates`, {
+            await fetch(apiUrl(`/api/sites/${site.id}/manual-dates`), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body),
@@ -1114,7 +1115,7 @@ function CredentialEditModal({
             hosting_password: password || null,
           };
 
-      const res = await fetch(`/api/sites/${siteId}/credentials`, {
+      const res = await fetch(apiUrl(`/api/sites/${siteId}/credentials`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-password': pass },
         body: JSON.stringify(body),
