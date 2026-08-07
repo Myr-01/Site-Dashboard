@@ -393,7 +393,13 @@ export async function runChecks(io) {
 }
 
 export async function getAllSitesWithLatestCheck() {
-  const sites = await dbAll('SELECT * FROM sites');
+  // Həssas sahələri (username/password) çıxarırıq — yalnız auth ilə ayrı endpoint-dən əldə edilə bilər
+  const sites = await dbAll(`
+    SELECT id, name, url, group_name, notes, created_at,
+           manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry,
+           domain_login_url, hosting_login_url
+    FROM sites
+  `);
 
   const results = [];
   for (const site of sites) {

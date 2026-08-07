@@ -30,11 +30,11 @@ export interface Site {
   manual_domain_registrar: string | null;
   manual_hosting_expiry: string | null;
   domain_login_url: string | null;
-  domain_username: string | null;
-  domain_password: string | null;
+  domain_username?: string | null;
+  domain_password?: string | null;
   hosting_login_url: string | null;
-  hosting_username: string | null;
-  hosting_password: string | null;
+  hosting_username?: string | null;
+  hosting_password?: string | null;
   group_name: string | null;
   notes: string | null;
   created_at: string;

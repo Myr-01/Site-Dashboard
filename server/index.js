@@ -38,7 +38,7 @@ const io = new Server(httpServer, {
       if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin)) {
         callback(null, true);
       } else {
-        callback(null, true); // Development üçün hamısına icazə ver
+        callback(new Error('CORS: Bu origin-ə icazə yoxdur'));
       }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -52,13 +52,12 @@ const siteBackupUpload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // Max 500MB
 });
 
-// CORS-u bütün origin-lər üçün aç
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || ALLOWED_ORIGINS.includes(origin) || /\.vercel\.app$/.test(origin)) {
       callback(null, true);
     } else {
-      callback(null, true); // Development üçün hamısına icazə ver
+      callback(new Error('CORS: Bu origin-ə icazə yoxdur'));
     }
   },
   credentials: true,
@@ -132,7 +131,7 @@ app.delete('/api/sites/:id', requireAuth, async (req, res) => {
 });
 
 // Update manual dates for a site
-app.post('/api/sites/:id/manual-dates', async (req, res) => {
+app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry } = req.body;
@@ -146,15 +145,25 @@ app.post('/api/sites/:id/manual-dates', async (req, res) => {
   }
 });
 
-// Update access credentials for a site — auth SiteDetailModal tərəfindən edilir
-app.post('/api/sites/:id/credentials', async (req, res) => {
+// Get access credentials for a site (READ) — auth tələb edir
+app.get('/api/sites/:id/credentials', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    // Şifrəni yoxla
-    const token = req.headers['x-admin-password'];
-    if (token !== ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'İcazə yoxdur' });
-    }
+    const site = await dbGet(
+      'SELECT domain_username, domain_password, hosting_username, hosting_password FROM sites WHERE id = ?',
+      [id]
+    );
+    if (!site) return res.status(404).json({ error: 'Sayt tapılmadı' });
+    res.json(site);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update access credentials for a site — auth SiteDetailModal tərəfindən edilir
+app.post('/api/sites/:id/credentials', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
     console.log('Credentials POST for site', id, req.body);
     const {
       domain_login_url, domain_username, domain_password,
@@ -342,7 +351,7 @@ app.get('/api/settings/email', async (req, res) => {
 });
 
 // Send test email
-app.post('/api/settings/test-email', async (req, res) => {
+app.post('/api/settings/test-email', requireAuth, async (req, res) => {
   try {
     await sendTestEmail();
     res.json({ success: true, message: 'Test email sent successfully' });
@@ -352,7 +361,7 @@ app.post('/api/settings/test-email', async (req, res) => {
 });
 
 // Test webhook
-app.post('/api/settings/test-webhook', async (req, res) => {
+app.post('/api/settings/test-webhook', requireAuth, async (req, res) => {
   try {
     const { telegram_webhook, discord_webhook, discord_user_id } = req.body;
     const testMessage = '🧪 **Test Mesajı**\n\nWebhook konfiqurasiyası düzgün işləyir! ✅';
@@ -476,7 +485,7 @@ app.get('/api/backups', (req, res) => {
 });
 
 // Manual backup yarat
-app.post('/api/backups', (req, res) => {
+app.post('/api/backups', requireAuth, (req, res) => {
   try {
     const result = createBackup();
     if (result) {
@@ -503,7 +512,7 @@ app.get('/api/backups/:name/download', (req, res) => {
 });
 
 // Backup-dan bərpa et
-app.post('/api/backups/:name/restore', (req, res) => {
+app.post('/api/backups/:name/restore', requireAuth, (req, res) => {
   try {
     const result = restoreBackup(req.params.name);
     if (result.success) {
@@ -517,7 +526,7 @@ app.post('/api/backups/:name/restore', (req, res) => {
 });
 
 // Backup sil
-app.delete('/api/backups/:name', (req, res) => {
+app.delete('/api/backups/:name', requireAuth, (req, res) => {
   try {
     const result = deleteBackup(req.params.name);
     if (result.success) {

@@ -115,6 +115,12 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const [groupValue, setGroupValue] = useState(initialSite.group_name || '');
   const [notesSaving, setNotesSaving] = useState(false);
   const [report, setReport] = useState<any>(null);
+  const [credentials, setCredentials] = useState<{
+    domain_username: string | null;
+    domain_password: string | null;
+    hosting_username: string | null;
+    hosting_password: string | null;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const check = site.latestCheck;
   const isOnline = check?.status === 'online';
@@ -135,6 +141,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
     setTimeout(() => setIsVisible(true), 10);
     fetchBackups();
     fetchSiteInfo();
+    fetchCredentials();
     fetchIncidents();
     fetchReport();
   }, []);
@@ -144,6 +151,22 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       const res = await fetch(apiUrl(`/api/sites/${site.id}/info`));
       setSiteInfo(await res.json());
     } catch {}
+  };
+
+  // Həssas sahələri yalnız admin login olduqda əldə et
+  const fetchCredentials = async () => {
+    const pass = sessionStorage.getItem('adminPassword');
+    if (!pass) { setCredentials(null); return; }
+    try {
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/credentials`), {
+        headers: { 'x-admin-password': pass },
+      });
+      if (res.ok) {
+        setCredentials(await res.json());
+      } else {
+        setCredentials(null);
+      }
+    } catch { setCredentials(null); }
   };
 
   const fetchIncidents = async () => {
@@ -404,8 +427,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   <CredentialSection
                     title="Domain Panel Girişi"
                     loginUrl={site.domain_login_url}
-                    username={site.domain_username}
-                    password={site.domain_password}
+                    username={credentials?.domain_username ?? null}
+                    password={credentials?.domain_password ?? null}
                     onEdit={() => setEditingCredential('domain')}
                   />
 
@@ -413,8 +436,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   <CredentialSection
                     title="Hosting Panel Girişi"
                     loginUrl={site.hosting_login_url}
-                    username={site.hosting_username}
-                    password={site.hosting_password}
+                    username={credentials?.hosting_username ?? null}
+                    password={credentials?.hosting_password ?? null}
                     onEdit={() => setEditingCredential('hosting')}
                   />
                 </div>
@@ -806,10 +829,10 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
           type={editingCredential}
           initial={{
             loginUrl: editingCredential === 'domain' ? site.domain_login_url : site.hosting_login_url,
-            username: editingCredential === 'domain' ? site.domain_username : site.hosting_username,
-            password: editingCredential === 'domain' ? site.domain_password : site.hosting_password,
+            username: editingCredential === 'domain' ? (credentials?.domain_username ?? '') : (credentials?.hosting_username ?? ''),
+            password: editingCredential === 'domain' ? (credentials?.domain_password ?? '') : (credentials?.hosting_password ?? ''),
           }}
-          onSave={async () => { setEditingCredential(null); await refreshSite(); }}
+          onSave={async () => { setEditingCredential(null); await refreshSite(); await fetchCredentials(); }}
           onClose={() => setEditingCredential(null)}
         />
       )}
