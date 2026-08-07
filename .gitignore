@@ -34,3 +34,50 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.env
+
+# Build outputs
+dist/
+build/
+client/dist/
+client/build/
+*.tsbuildinfo
+client/tsconfig.tsbuildinfo
+
+# SQLite database faylları (real data — repo-ya qoyulmamalı)
+*.sqlite
+*.sqlite3
+*.db
+
+# Loglar
+*.log
+npm-debug.log*
+logs/
+
+# OS/editor fayllar
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Kiro-nun daxili faylları (istəsən saxla, istəməsən ignore et)
+.kiro/
+
+# Ayrı layihələr (yanlışlıqla bu repo-ya düşməsin)
+rpg-game/
+wordpress-theme/
+
+# Railway/Vercel local cache
+.vercel/
+.railway/
