@@ -290,14 +290,34 @@ async function checkSite(site) {
     // Detect hosting provider from IP and headers
     result.hosting_provider = detectHostingProvider(result.server_ip, hostname);
 
-    // Domain expiry — əvvəlcə WHOIS, sonra RDAP fallback
-    const rootDomain = getRootDomain(hostname);
-    const domainData = await lookupDomainExpiry(rootDomain);
-    if (domainData.registrar) result.domain_registrar = domainData.registrar;
-    if (domainData.expiry) {
-      result.domain_expiry = domainData.expiry;
-      const now = new Date();
-      result.domain_days_remaining = Math.ceil((new Date(domainData.expiry) - now) / (1000 * 60 * 60 * 24));
+    // WHOIS-u yalnız son yoxlamadan 12 saatdan çox keçibsə et
+    const WHOIS_CACHE_HOURS = 12;
+    const now = new Date();
+    const lastWhoisCheck = site.last_whois_check ? new Date(site.last_whois_check) : null;
+    const shouldCheckWhois = !lastWhoisCheck || (now - lastWhoisCheck) > WHOIS_CACHE_HOURS * 60 * 60 * 1000;
+
+    if (shouldCheckWhois) {
+      const rootDomain = getRootDomain(hostname);
+      const domainData = await lookupDomainExpiry(rootDomain);
+      if (domainData.registrar) result.domain_registrar = domainData.registrar;
+      if (domainData.expiry) {
+        result.domain_expiry = domainData.expiry;
+        result.domain_days_remaining = Math.ceil((new Date(domainData.expiry) - now) / (1000 * 60 * 60 * 24));
+      }
+      await dbRun(`UPDATE sites SET last_whois_check = datetime('now') WHERE id = ?`, [site.id]);
+    } else {
+      // Keşlənmiş dəyəri sondan olan check-dən götür
+      const lastCheck = await dbGet(
+        `SELECT domain_registrar, domain_expiry, domain_days_remaining FROM checks WHERE site_id = ? AND domain_expiry IS NOT NULL ORDER BY checked_at DESC LIMIT 1`,
+        [site.id]
+      );
+      if (lastCheck) {
+        result.domain_registrar = lastCheck.domain_registrar;
+        result.domain_expiry = lastCheck.domain_expiry;
+        if (lastCheck.domain_expiry) {
+          result.domain_days_remaining = Math.ceil((new Date(lastCheck.domain_expiry) - now) / (1000 * 60 * 60 * 24));
+        }
+      }
     }
   } catch {
     // DNS lookup failed
@@ -368,8 +388,12 @@ export async function runChecks(io) {
       checkResponseTimeAlert(site, result.response_time);
     }
 
-    // Store geo-location for server IP
-    if (result.server_ip) {
+    // Store geo-location for server IP — yalnız 24 saatdan çox keçibsə sorğula
+    const GEO_CACHE_HOURS = 24;
+    const lastGeoCheck = site.last_geo_check ? new Date(site.last_geo_check) : null;
+    const shouldCheckGeo = !lastGeoCheck || (Date.now() - lastGeoCheck.getTime()) > GEO_CACHE_HOURS * 60 * 60 * 1000;
+
+    if (result.server_ip && shouldCheckGeo) {
       try {
         const geoRes = await axios.get(`http://ip-api.com/json/${result.server_ip}`);
         if (geoRes.data.status === 'success') {
@@ -378,6 +402,7 @@ export async function runChecks(io) {
              VALUES (?, ?, ?, ?, ?)`,
             [site.id, geoRes.data.lat, geoRes.data.lon, geoRes.data.country, geoRes.data.city]
           );
+          await dbRun(`UPDATE sites SET last_geo_check = datetime('now') WHERE id = ?`, [site.id]);
         }
       } catch {
         // Geo-location lookup failed
@@ -437,8 +462,8 @@ export function startMonitoring(io) {
   // Run immediately on start
   runChecks(io);
 
-  // Then every 60 seconds
-  setInterval(() => runChecks(io), 60000);
+  // Then every 30 minutes
+  setInterval(() => runChecks(io), 30 * 60 * 1000);
 
   // Expiry xəbərdarlıqlarını hər 12 saatda bir yoxla
   checkExpiryAlerts();

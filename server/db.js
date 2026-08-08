@@ -177,6 +177,8 @@ export async function initDb() {
   try { await dbExec(`ALTER TABLE sites ADD COLUMN hosting_password TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN group_name TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN notes TEXT`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN last_whois_check TEXT`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN last_geo_check TEXT`); } catch {}
 
   // Incident log cədvəli
   await dbExec(`
