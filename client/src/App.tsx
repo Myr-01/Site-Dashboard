@@ -83,11 +83,15 @@ function App() {
   const handleDelete = async (id: number) => {
     try {
       const pass = sessionStorage.getItem('adminPassword');
-      await fetch(apiUrl(`/api/sites/${id}`), {
+      const res = await fetch(apiUrl(`/api/sites/${id}`), {
         method: 'DELETE',
         headers: pass ? { 'x-admin-password': pass } : {},
       });
-      setSites(prev => prev.filter(s => s.id !== id));
+      if (res.ok) {
+        setSites(prev => prev.filter(s => s.id !== id));
+      } else {
+        console.error('Failed to delete site: server returned', res.status);
+      }
     } catch (err) {
       console.error('Failed to delete site:', err);
     }

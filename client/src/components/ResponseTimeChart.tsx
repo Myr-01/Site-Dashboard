@@ -106,7 +106,7 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
         padding: 10,
         displayColors: false,
         callbacks: {
-          label: (context: any) => `${context.parsed.y}ms`,
+          label: (context: { parsed: { y: number | null } }) => `${context.parsed.y ?? 0}ms`,
         },
       },
     },
@@ -127,7 +127,7 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
         },
         ticks: {
           color: '#9aa3b8',
-          callback: (value: any) => `${value}ms`,
+          callback: (value: string | number) => `${value}ms`,
         },
       },
     },

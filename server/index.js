@@ -2,6 +2,8 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import fs from 'fs';
@@ -19,6 +21,21 @@ import { analyzeBackup } from './backup-analyzer.js';
 import { DATA_DIR } from './db.js';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+
+// Fayl adında path traversal simvollarına icazə vermə
+function isSafeFilename(name) {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  // ".." , "/" , "\" olan hər hansı fayl adını rədd et
+  if (name.includes('..') || name.includes('/') || name.includes('\\')) return false;
+  return true;
+}
+
+// Brute-force qorunması — login cəhdlərini limitlə
+const authLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 dəqiqə
+  max: 10,
+  message: { error: 'Çox sayda cəhd. Bir az sonra yenidən cəhd edin.' },
+});
 
 // Frontend origin: Vercel deploy URL və ya localhost
 const ALLOWED_ORIGINS = [
@@ -46,7 +63,7 @@ const io = new Server(httpServer, {
   },
 });
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 const siteBackupUpload = multer({
   dest: 'site-backups/temp/',
   limits: { fileSize: 500 * 1024 * 1024 }, // Max 500MB
@@ -62,6 +79,9 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use(helmet({
+  contentSecurityPolicy: false, // React app üçün CSP ayrıca konfiqurasiya tələb edir
+}));
 app.use(express.json());
 
 // Serve static files (production build)
@@ -74,7 +94,7 @@ if (fs.existsSync(clientDistPath)) {
 // === AUTH ===
 
 // Şifrəni yoxla
-app.post('/api/auth/verify', (req, res) => {
+app.post('/api/auth/verify', authLimiter, (req, res) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
     res.json({ success: true });
@@ -164,7 +184,7 @@ app.get('/api/sites/:id/credentials', requireAuth, async (req, res) => {
 app.post('/api/sites/:id/credentials', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Credentials POST for site', id, req.body);
+    console.log('Credentials POST for site', id);
     const {
       domain_login_url, domain_username, domain_password,
       hosting_login_url, hosting_username, hosting_password,
@@ -396,7 +416,7 @@ app.post('/api/settings/test-webhook', requireAuth, async (req, res) => {
         const response = await axios.post(discord_webhook, {
           content: discordContent,
           allowed_mentions: {
-            parse: ['users', 'roles', 'everyone']
+            parse: ['users']
           }
         });
         discordSuccess = true;
@@ -438,12 +458,29 @@ app.post('/api/settings/webhooks', requireAuth, async (req, res) => {
   }
 });
 
+// URL maskalama funksiyası
+function maskUrl(url) {
+  if (!url || url.length < 10) return url ? '••••••••' : '';
+  return url.slice(0, 20) + '••••••••' + url.slice(-6);
+}
+
 // Get webhook settings
 app.get('/api/settings/webhooks', async (req, res) => {
   try {
     const row = await dbGet("SELECT value FROM settings WHERE key = 'webhooks'");
     if (row) {
-      res.json(JSON.parse(row.value));
+      const data = JSON.parse(row.value);
+      // Admin auth varsa tam URL göstər, yoxsa maskala
+      const token = req.headers['x-admin-password'];
+      if (token === ADMIN_PASSWORD) {
+        res.json(data);
+      } else {
+        res.json({
+          ...data,
+          telegram_webhook: maskUrl(data.telegram_webhook),
+          discord_webhook: maskUrl(data.discord_webhook),
+        });
+      }
     } else {
       res.json({ telegram_webhook: '', discord_webhook: '', discord_user_id: '', message_template: '' });
     }
@@ -499,9 +536,16 @@ app.post('/api/backups', requireAuth, (req, res) => {
 });
 
 // Backup endir
-app.get('/api/backups/:name/download', (req, res) => {
+app.get('/api/backups/:name/download', requireAuth, (req, res) => {
   try {
+    if (!isSafeFilename(req.params.name)) {
+      return res.status(400).json({ error: 'Yanlış fayl adı' });
+    }
     const filePath = path.join(BACKUPS_PATH, req.params.name);
+    // Əlavə təhlükəsizlik: real path-in hələ də BACKUPS_PATH daxilində olduğunu təsdiqlə
+    if (!path.resolve(filePath).startsWith(path.resolve(BACKUPS_PATH))) {
+      return res.status(400).json({ error: 'Yanlış fayl yolu' });
+    }
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Backup tapılmadı' });
     }
@@ -514,6 +558,9 @@ app.get('/api/backups/:name/download', (req, res) => {
 // Backup-dan bərpa et
 app.post('/api/backups/:name/restore', requireAuth, (req, res) => {
   try {
+    if (!isSafeFilename(req.params.name)) {
+      return res.status(400).json({ error: 'Yanlış fayl adı' });
+    }
     const result = restoreBackup(req.params.name);
     if (result.success) {
       res.json(result);
@@ -528,6 +575,9 @@ app.post('/api/backups/:name/restore', requireAuth, (req, res) => {
 // Backup sil
 app.delete('/api/backups/:name', requireAuth, (req, res) => {
   try {
+    if (!isSafeFilename(req.params.name)) {
+      return res.status(400).json({ error: 'Yanlış fayl adı' });
+    }
     const result = deleteBackup(req.params.name);
     if (result.success) {
       res.json(result);
@@ -679,15 +729,20 @@ app.get('/api/sites/:id/backups', async (req, res) => {
 });
 
 // Sayt backup-ını endir
-app.get('/api/sites/:id/backups/:name/download', async (req, res) => {
+app.get('/api/sites/:id/backups/:name/download', requireAuth, async (req, res) => {
   try {
     const { id, name } = req.params;
-    const filePath = path.join(SITE_BACKUPS_DIR, `site_${id}`, name);
-
+    if (!isSafeFilename(name)) {
+      return res.status(400).json({ error: 'Yanlış fayl adı' });
+    }
+    const siteDir = path.join(SITE_BACKUPS_DIR, `site_${id}`);
+    const filePath = path.join(siteDir, name);
+    if (!path.resolve(filePath).startsWith(path.resolve(siteDir))) {
+      return res.status(400).json({ error: 'Yanlış fayl yolu' });
+    }
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Backup tapılmadı' });
     }
-
     res.download(filePath, name);
   } catch (err) {
     res.status(500).json({ error: err.message });

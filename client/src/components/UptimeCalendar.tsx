@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Check } from '../types';
 import { apiUrl } from '../api';
 
 interface UptimeCalendarProps {
@@ -19,7 +20,7 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
   useEffect(() => {
     fetch(apiUrl(`/api/sites/${siteId}/history`))
       .then(res => res.json())
-      .then((history: any[]) => {
+      .then((history: Check[]) => {
         const daysAgo = Date.now() - days * 24 * 60 * 60 * 1000;
         const filtered = history.filter(h => new Date(h.checked_at + 'Z').getTime() > daysAgo);
 

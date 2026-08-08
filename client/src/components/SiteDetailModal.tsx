@@ -236,7 +236,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const handleDeleteBackup = async (name: string) => {
     const ok = await dialog.confirm(`"${name}" backup-ını silmək istəyirsiniz?`, 'Backup Silinsin?', true);
     if (!ok) return;
-    await fetch(apiUrl(`/api/sites/${site.id}/backups/${name}`), { method: 'DELETE', headers: { ...authHeaders() } });
+    await fetch(apiUrl(`/api/sites/${site.id}/backups/${encodeURIComponent(name)}`), { method: 'DELETE', headers: { ...authHeaders() } });
     fetchBackups();
   };
 
@@ -744,7 +744,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                             <p className="text-text-muted text-xs">{new Date(backup.createdAt).toLocaleString('az-AZ')} • {backup.sizeFormatted}</p>
                           </div>
                           <div className="flex gap-1 ml-2">
-                            <a href={`/api/sites/${site.id}/backups/${backup.name}/download`} className="px-2.5 py-1.5 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors" title="Endir">↓</a>
+                            <a href={`/api/sites/${site.id}/backups/${encodeURIComponent(backup.name)}/download`} className="px-2.5 py-1.5 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors" title="Endir">↓</a>
                             <button onClick={() => handleDeleteBackup(backup.name)} className="px-2.5 py-1.5 text-xs text-red-400 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors" title="Sil">✕</button>
                           </div>
                         </div>
@@ -812,7 +812,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
             await fetch(apiUrl(`/api/sites/${site.id}/manual-dates`), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', 'x-admin-password': pass },
               body: JSON.stringify(body),
             });
             setEditField(null);

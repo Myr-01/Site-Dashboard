@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { authHeaders } from '../useAuth';
 import { apiUrl } from '../api';
 
@@ -37,8 +37,8 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
 
       onAdded();
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Server is not responding. Make sure the backend is running on port 3001.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Server is not responding. Make sure the backend is running on port 3001.');
     } finally {
       setLoading(false);
     }

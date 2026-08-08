@@ -53,7 +53,7 @@ async function sendWebhookNotification(site, result) {
       await axios.post(webhooks.discord_webhook, {
         content: discordContent,
         allowed_mentions: {
-          parse: ['users', 'roles', 'everyone']
+          parse: ['users']
         }
       }).catch(() => {});
     }

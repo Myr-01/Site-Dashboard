@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+﻿import { useState, useRef } from 'react';
 import { authHeaders } from '../useAuth';
 import { apiUrl } from '../api';
 
@@ -39,8 +39,8 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
 
       setResult(data);
       onImported();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Naməlum xəta');
     } finally {
       setLoading(false);
     }
@@ -65,9 +65,9 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
 
         {result && (
           <div className="mt-4 p-3 bg-navy-light rounded-lg border border-border">
-            <p className="text-green-400 text-sm">✓ {result.success} sites imported successfully</p>
+            <p className="text-green-400 text-sm">âœ“ {result.success} sites imported successfully</p>
             {result.errors > 0 && (
-              <p className="text-red-400 text-sm mt-1">✗ {result.errors} rows failed</p>
+              <p className="text-red-400 text-sm mt-1">âœ— {result.errors} rows failed</p>
             )}
           </div>
         )}

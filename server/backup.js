@@ -98,8 +98,18 @@ export function listBackups() {
   }
 }
 
+// Fayl adında path traversal simvollarına icazə vermə
+function isSafeFilename(name) {
+  if (typeof name !== 'string' || name.length === 0) return false;
+  if (name.includes('..') || name.includes('/') || name.includes('\\')) return false;
+  return true;
+}
+
 // Backup-dan bərpa et
 export function restoreBackup(backupName) {
+  if (!isSafeFilename(backupName)) {
+    return { success: false, message: 'Yanlış fayl adı' };
+  }
   try {
     const backupPath = path.join(BACKUP_DIR, backupName);
     if (!fs.existsSync(backupPath)) {
@@ -123,6 +133,9 @@ export function restoreBackup(backupName) {
 
 // Backup sil
 export function deleteBackup(backupName) {
+  if (!isSafeFilename(backupName)) {
+    return { success: false, message: 'Yanlış fayl adı' };
+  }
   try {
     const backupPath = path.join(BACKUP_DIR, backupName);
     if (!fs.existsSync(backupPath)) {
