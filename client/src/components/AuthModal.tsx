@@ -108,7 +108,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
             <button
               type="submit"
               disabled={loading || !password.trim()}
-              className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50"
+              className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Yoxlanılır...' : 'Giriş'}
             </button>

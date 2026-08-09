@@ -704,7 +704,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   <button
                     onClick={saveNotes}
                     disabled={notesSaving}
-                    className="w-full py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90 disabled:opacity-50"
+                    className="w-full py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }}
                   >
                     {notesSaving ? 'Saxlanılır...' : 'Saxla'}
@@ -726,7 +726,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
-                      className="w-full px-4 py-3 text-sm border border-dashed border-accent/40 text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50"
+                      className="w-full px-4 py-3 text-sm border border-dashed border-accent/40 text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {uploading ? 'Yüklənir və analiz olunur...' : '📁 Backup Faylı Yüklə (.zip, .wpress, .rar)'}
                     </button>
@@ -961,7 +961,7 @@ function EditFieldModal({
           <button
             onClick={save}
             disabled={loading}
-            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90 disabled:opacity-50"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }}
           >
             {loading ? '...' : 'Saxla'}
@@ -1232,7 +1232,7 @@ function CredentialEditModal({
           <button
             onClick={handleSave}
             disabled={loading}
-            className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Saxlanılır...' : 'Saxla'}
           </button>

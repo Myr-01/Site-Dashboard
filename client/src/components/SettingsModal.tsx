@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { SmtpSettings, WebhookSettings } from '../types';
 import { authHeaders } from '../useAuth';
 import { dialog } from './Dialog';
@@ -71,10 +71,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         body: JSON.stringify(settings),
       });
 
-      if (!res.ok) throw new Error('ParametrlÉ™r yadda saxlanmadÄ±');
-      setMessage('Email parametrlÉ™ri uÄŸurla saxlanÄ±ldÄ±');
-    } catch (err: unknown) {
-      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+      if (!res.ok) throw new Error('Parametrlər yadda saxlanmadı');
+      setMessage('Email parametrləri uğurla saxlanıldı');
+    } catch (err: any) {
+      setMessage(`Xəta: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     setLoading(true);
     setMessage('');
 
-    // BoÅŸ dÉ™yÉ™rlÉ™ri trim et
+    // Boş dəyərləri trim et
     const cleanWebhooks = {
       telegram_webhook: webhooks.telegram_webhook.trim(),
       discord_webhook: webhooks.discord_webhook.trim(),
@@ -102,10 +102,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
       const data = await res.json();
       
-      if (!res.ok) throw new Error(data.error || 'ParametrlÉ™r yadda saxlanmadÄ±');
-      setMessage('Webhook parametrlÉ™ri uÄŸurla saxlanÄ±ldÄ±');
-    } catch (err: unknown) {
-      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+      if (!res.ok) throw new Error(data.error || 'Parametrlər yadda saxlanmadı');
+      setMessage('Webhook parametrləri uğurla saxlanıldı');
+    } catch (err: any) {
+      setMessage(`Xəta: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -118,10 +118,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     try {
       const res = await fetch(apiUrl('/api/settings/test-email'), { method: 'POST', headers: { ...authHeaders() } });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Test email gÃ¶ndÉ™rilmÉ™di');
-      setMessage('Test email uÄŸurla gÃ¶ndÉ™rildi!');
-    } catch (err: unknown) {
-      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+      if (!res.ok) throw new Error(data.error || 'Test email göndərilmədi');
+      setMessage('Test email uğurla göndərildi!');
+    } catch (err: any) {
+      setMessage(`Xəta: ${err.message}`);
     } finally {
       setTestLoading(false);
     }
@@ -130,7 +130,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-heading font-bold text-white mb-6">ParametrlÉ™r</h2>
+        <h2 className="text-xl font-heading font-bold text-white mb-6">Parametrlər</h2>
         
         {/* Tabs */}
         <div className="flex gap-2 mb-6 border-b border-border">
@@ -169,7 +169,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         {activeTab === 'email' ? (
           <>
             <p className="text-text-muted text-sm mb-4">
-              SMTP konfiqurasiyasÄ± ilÉ™ sayt offline olanda email bildiriÅŸ alÄ±n.
+              SMTP konfiqurasiyası ilə sayt offline olanda email bildiriş alın.
             </p>
 
             <form onSubmit={handleSaveEmail} className="space-y-3">
@@ -194,7 +194,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 />
               </div>
               <div>
-                <label className="block text-text-muted text-xs mb-1">Ä°stifadÉ™Ã§i adÄ±</label>
+                <label className="block text-text-muted text-xs mb-1">İstifadəçi adı</label>
                 <input
                   type="text"
                   value={settings.user}
@@ -204,17 +204,17 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 />
               </div>
               <div>
-                <label className="block text-text-muted text-xs mb-1">ÅžifrÉ™</label>
+                <label className="block text-text-muted text-xs mb-1">Şifrə</label>
                 <input
                   type="password"
                   value={settings.pass}
                   onChange={e => setSettings({ ...settings, pass: e.target.value })}
-                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                  placeholder="••••••••"
                   className="w-full px-3 py-2 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-text-muted text-xs mb-1">AlÄ±cÄ± Email</label>
+                <label className="block text-text-muted text-xs mb-1">Alıcı Email</label>
                 <input
                   type="email"
                   value={settings.recipient}
@@ -225,7 +225,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </div>
 
               {message && activeTab === 'email' && (
-                <p className={`text-sm ${message.includes('XÉ™ta') ? 'text-red-400' : 'text-green-400'}`}>
+                <p className={`text-sm ${message.includes('Xəta') ? 'text-red-400' : 'text-green-400'}`}>
                   {message}
                 </p>
               )}
@@ -235,16 +235,16 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   type="button"
                   onClick={handleTestEmail}
                   disabled={testLoading}
-                  className="px-4 py-2.5 text-sm border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50"
+                  className="px-4 py-2.5 text-sm border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {testLoading ? 'GÃ¶ndÉ™rilir...' : 'Test'}
+                  {testLoading ? 'Göndərilir...' : 'Test'}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'SaxlanÄ±lÄ±r...' : 'Saxla'}
+                  {loading ? 'Saxlanılır...' : 'Saxla'}
                 </button>
               </div>
             </form>
@@ -252,7 +252,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         ) : (
           <>
             <p className="text-text-muted text-sm mb-4">
-              Telegram vÉ™ ya Discord webhook URL daxil edin. Sayt offline olanda avtomatik bildiriÅŸ gÃ¶ndÉ™rilÉ™cÉ™k.
+              Telegram və ya Discord webhook URL daxil edin. Sayt offline olanda avtomatik bildiriş göndəriləcək.
             </p>
 
             <form onSubmit={handleSaveWebhooks} className="space-y-3">
@@ -266,7 +266,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   className="w-full px-3 py-2 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors"
                 />
                 <p className="text-text-muted text-xs mt-1">
-                  Telegram bot yaradÄ±n vÉ™ webhook URL alÄ±n
+                  Telegram bot yaradın və webhook URL alın
                 </p>
               </div>
               <div>
@@ -279,11 +279,11 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   className="w-full px-3 py-2 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors resize-none"
                 />
                 <p className="text-text-muted text-xs mt-1">
-                  Discord kanalÄ±nÄ±zda webhook yaradÄ±n
+                  Discord kanalınızda webhook yaradın
                 </p>
               </div>
               <div>
-                <label className="block text-text-muted text-xs mb-1">Discord User ID (ping Ã¼Ã§Ã¼n)</label>
+                <label className="block text-text-muted text-xs mb-1">Discord User ID (ping üçün)</label>
                 <input
                   type="text"
                   value={webhooks.discord_user_id}
@@ -292,25 +292,25 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   className="w-full px-3 py-2 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors"
                 />
                 <p className="text-text-muted text-xs mt-1">
-                  Sayt offline olanda sizi @ ilÉ™ ping edÉ™cÉ™k. Discord-da User Settings â†’ Advanced â†’ Developer Mode aktiv edin, sonra profilinizÉ™ saÄŸ klik â†’ "Copy User ID"
+                  Sayt offline olanda sizi @ ilə ping edəcək. Discord-da User Settings → Advanced → Developer Mode aktiv edin, sonra profilinizə sağ klik → "Copy User ID"
                 </p>
               </div>
               <div>
-                <label className="block text-text-muted text-xs mb-1">Mesaj Åžablonu (opsional)</label>
+                <label className="block text-text-muted text-xs mb-1">Mesaj Şablonu (opsional)</label>
                 <textarea
                   value={webhooks.message_template}
                   onChange={e => setWebhooks({ ...webhooks, message_template: e.target.value })}
-                  placeholder={'âš ï¸ **Sayt Offline Oldu**\n\n**Sayt:** {name}\n**URL:** {url}\n**Status:** {status}\n**Vaxt:** {time}'}
+                  placeholder={'⚠️ **Sayt Offline Oldu**\n\n**Sayt:** {name}\n**URL:** {url}\n**Status:** {status}\n**Vaxt:** {time}'}
                   rows={5}
                   className="w-full px-3 py-2 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors resize-none font-mono"
                 />
                 <p className="text-text-muted text-xs mt-1">
-                  DÉ™yiÅŸÉ™nlÉ™r: <span className="text-accent">{'{name}'}</span> <span className="text-accent">{'{url}'}</span> <span className="text-accent">{'{status}'}</span> <span className="text-accent">{'{time}'}</span> <span className="text-accent">{'{response_time}'}</span> <span className="text-accent">{'{ip}'}</span> <span className="text-accent">{'{hosting}'}</span>
+                  Dəyişənlər: <span className="text-accent">{'{name}'}</span> <span className="text-accent">{'{url}'}</span> <span className="text-accent">{'{status}'}</span> <span className="text-accent">{'{time}'}</span> <span className="text-accent">{'{response_time}'}</span> <span className="text-accent">{'{ip}'}</span> <span className="text-accent">{'{hosting}'}</span>
                 </p>
               </div>
 
               {message && activeTab === 'webhooks' && (
-                <p className={`text-sm ${message.includes('XÉ™ta') ? 'text-red-400' : 'text-green-400'}`}>
+                <p className={`text-sm ${message.includes('Xəta') ? 'text-red-400' : 'text-green-400'}`}>
                   {message}
                 </p>
               )}
@@ -320,7 +320,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   type="button"
                   onClick={async () => {
                     if (!webhooks.telegram_webhook && !webhooks.discord_webhook) {
-                      setMessage('XÉ™ta: Æn azÄ± bir webhook URL daxil edin');
+                      setMessage('Xəta: Ən azı bir webhook URL daxil edin');
                       return;
                     }
                     setTestLoading(true);
@@ -332,25 +332,25 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                         body: JSON.stringify(webhooks),
                       });
                       const data = await testRes.json();
-                      if (!testRes.ok) throw new Error(data.error || 'Test mesajÄ± gÃ¶ndÉ™rilmÉ™di');
-                      setMessage('Test mesajÄ± uÄŸurla gÃ¶ndÉ™rildi!');
-                    } catch (err: unknown) {
-                      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+                      if (!testRes.ok) throw new Error(data.error || 'Test mesajı göndərilmədi');
+                      setMessage('Test mesajı uğurla göndərildi!');
+                    } catch (err: any) {
+                      setMessage(`Xəta: ${err.message}`);
                     } finally {
                       setTestLoading(false);
                     }
                   }}
                   disabled={testLoading}
-                  className="px-4 py-2.5 text-sm border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50"
+                  className="px-4 py-2.5 text-sm border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {testLoading ? 'GÃ¶ndÉ™rilir...' : 'Test'}
+                  {testLoading ? 'Göndərilir...' : 'Test'}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'SaxlanÄ±lÄ±r...' : 'Saxla'}
+                  {loading ? 'Saxlanılır...' : 'Saxla'}
                 </button>
               </div>
             </form>
@@ -366,7 +366,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             onClick={onClose}
             className="px-4 py-2 text-sm border border-border text-text-muted rounded-lg hover:text-white transition-colors"
           >
-            BaÄŸla
+            Bağla
           </button>
         </div>
       </div>
@@ -389,7 +389,7 @@ function BackupTab() {
       const data = await res.json();
       setBackups(data);
     } catch {
-      setMessage('XÉ™ta: Backuplar yÃ¼klÉ™nmÉ™di');
+      setMessage('Xəta: Backuplar yüklənmədi');
     }
   };
 
@@ -400,10 +400,10 @@ function BackupTab() {
       const res = await fetch(apiUrl('/api/backups'), { method: 'POST', headers: { ...authHeaders() } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setMessage('Backup uÄŸurla yaradÄ±ldÄ±!');
+      setMessage('Backup uğurla yaradıldı!');
       fetchBackups();
-    } catch (err: unknown) {
-      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+    } catch (err: any) {
+      setMessage(`Xəta: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -411,8 +411,8 @@ function BackupTab() {
 
   const handleRestore = async (name: string) => {
     const ok = await dialog.confirm(
-      `"${name}" backup-Ä±ndan bÉ™rpa etmÉ™k istÉ™yirsiniz?\n\nDiqqÉ™t: Cari mÉ™lumatlar É™vÉ™z olunacaq (avtomatik ehtiyat backup alÄ±nacaq).`,
-      'Backup BÉ™rpasÄ±',
+      `"${name}" backup-ından bərpa etmək istəyirsiniz?\n\nDiqqət: Cari məlumatlar əvəz olunacaq (avtomatik ehtiyat backup alınacaq).`,
+      'Backup Bərpası',
       true
     );
     if (!ok) return;
@@ -422,25 +422,25 @@ function BackupTab() {
       const res = await fetch(apiUrl(`/api/backups/${encodeURIComponent(name)}/restore`), { method: 'POST', headers: { ...authHeaders() } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setMessage('Backup bÉ™rpa edildi! SÉ™hifÉ™ni yenilÉ™yin.');
+      setMessage('Backup bərpa edildi! Səhifəni yeniləyin.');
       fetchBackups();
-    } catch (err: unknown) {
-      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+    } catch (err: any) {
+      setMessage(`Xəta: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDelete = async (name: string) => {
-    const ok = await dialog.confirm(`"${name}" backup-Ä±nÄ± silmÉ™k istÉ™yirsiniz?`, 'Backup Silinsin?', true);
+    const ok = await dialog.confirm(`"${name}" backup-ını silmək istəyirsiniz?`, 'Backup Silinsin?', true);
     if (!ok) return;
     try {
       const res = await fetch(apiUrl(`/api/backups/${encodeURIComponent(name)}`), { method: 'DELETE', headers: { ...authHeaders() } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       fetchBackups();
-    } catch (err: unknown) {
-      setMessage(`XÉ™ta: ${err instanceof Error ? err.message : "Naməlum xəta"}`);
+    } catch (err: any) {
+      setMessage(`Xəta: ${err.message}`);
     }
   };
 
@@ -457,7 +457,7 @@ function BackupTab() {
   return (
     <div>
       <p className="text-text-muted text-sm mb-4">
-        VerilÉ™nlÉ™r bazasÄ±nÄ±n avtomatik backup-Ä± hÉ™r 24 saatda alÄ±nÄ±r. Son 7 backup saxlanÄ±lÄ±r.
+        Verilənlər bazasının avtomatik backup-ı hər 24 saatda alınır. Son 7 backup saxlanılır.
       </p>
 
       <button
@@ -465,17 +465,17 @@ function BackupTab() {
         disabled={loading}
         className="w-full px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 mb-4"
       >
-        {loading ? 'YaradÄ±lÄ±r...' : 'ðŸ’¾ Ä°ndi Backup Yarat'}
+        {loading ? 'Yaradılır...' : '💾 İndi Backup Yarat'}
       </button>
 
       {message && (
-        <p className={`text-sm mb-3 ${message.includes('XÉ™ta') ? 'text-red-400' : 'text-green-400'}`}>
+        <p className={`text-sm mb-3 ${message.includes('Xəta') ? 'text-red-400' : 'text-green-400'}`}>
           {message}
         </p>
       )}
 
       {backups.length === 0 ? (
-        <p className="text-text-muted text-sm text-center py-4">HÉ™lÉ™ backup yoxdur</p>
+        <p className="text-text-muted text-sm text-center py-4">Hələ backup yoxdur</p>
       ) : (
         <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
           {backups.map(backup => (
@@ -483,7 +483,7 @@ function BackupTab() {
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-medium truncate">{backup.name}</p>
                 <p className="text-text-muted text-xs">
-                  {formatDate(backup.createdAt)} â€¢ {backup.sizeFormatted}
+                  {formatDate(backup.createdAt)} • {backup.sizeFormatted}
                 </p>
               </div>
               <div className="flex gap-1.5 ml-2">
@@ -492,21 +492,21 @@ function BackupTab() {
                   className="px-2 py-1 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors"
                   title="Endir"
                 >
-                  â†“
+                  ↓
                 </a>
                 <button
                   onClick={() => handleRestore(backup.name)}
                   className="px-2 py-1 text-xs text-green-400 border border-green-400/30 rounded hover:bg-green-400/10 transition-colors"
-                  title="BÉ™rpa et"
+                  title="Bərpa et"
                 >
-                  â†»
+                  ↻
                 </button>
                 <button
                   onClick={() => handleDelete(backup.name)}
                   className="px-2 py-1 text-xs text-red-400 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors"
                   title="Sil"
                 >
-                  âœ•
+                  ✕
                 </button>
               </div>
             </div>
