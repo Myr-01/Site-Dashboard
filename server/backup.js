@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DATA_DIR, dbPath } from './db.js';
+import { isSafeFilename } from './utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = dbPath;
@@ -96,13 +97,6 @@ export function listBackups() {
     console.error('List backups error:', err.message);
     return [];
   }
-}
-
-// Fayl adında path traversal simvollarına icazə vermə
-function isSafeFilename(name) {
-  if (typeof name !== 'string' || name.length === 0) return false;
-  if (name.includes('..') || name.includes('/') || name.includes('\\')) return false;
-  return true;
 }
 
 // Backup-dan bərpa et

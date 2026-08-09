@@ -505,6 +505,7 @@ function BackupTab() {
                   onClick={() => handleDelete(backup.name)}
                   className="px-2 py-1 text-xs text-red-400 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors"
                   title="Sil"
+                  aria-label="Backup-ı sil"
                 >
                   ✕
                 </button>

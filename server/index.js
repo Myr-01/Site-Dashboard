@@ -14,6 +14,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { initDb, dbRun, dbGet, dbAll } from './db.js';
+import { isSafeFilename } from './utils.js';
 import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
@@ -21,14 +22,6 @@ import { analyzeBackup } from './backup-analyzer.js';
 import { DATA_DIR } from './db.js';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
-
-// Fayl adında path traversal simvollarına icazə vermə
-function isSafeFilename(name) {
-  if (typeof name !== 'string' || name.length === 0) return false;
-  // ".." , "/" , "\" olan hər hansı fayl adını rədd et
-  if (name.includes('..') || name.includes('/') || name.includes('\\')) return false;
-  return true;
-}
 
 // Brute-force qorunması — login cəhdlərini limitlə
 const authLimiter = rateLimit({

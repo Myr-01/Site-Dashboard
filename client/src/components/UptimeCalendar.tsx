@@ -83,7 +83,7 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
           <span>More</span>
         </div>
       </div>
-      <div className={`grid gap-1 ${days === 7 ? 'grid-cols-7' : 'grid-cols-10'}`}>
+      <div className={`grid gap-1 ${days === 7 ? 'grid-cols-7' : 'grid-cols-6 sm:grid-cols-10'}`}>
         {data.map((day, i) => (
           <div
             key={i}

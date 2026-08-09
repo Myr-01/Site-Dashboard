@@ -307,13 +307,13 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                 {site.url} ↗
               </a>
             </div>
-            <button onClick={handleClose} className="ml-3 text-text-muted hover:text-white transition-colors text-xl leading-none">
+            <button onClick={handleClose} className="ml-3 text-text-muted hover:text-white transition-colors text-xl leading-none" aria-label="Bağla">
               ✕
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 mt-4 -mb-px overflow-x-auto scrollbar-thin">
+          <div className="flex gap-1 mt-4 -mb-px overflow-x-auto scrollbar-hide">
             {tabs.map(tab => (
               <button
                 key={tab.key}
@@ -746,8 +746,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                             <p className="text-text-muted text-xs">{new Date(backup.createdAt).toLocaleString('az-AZ')} • {backup.sizeFormatted}</p>
                           </div>
                           <div className="flex gap-1 ml-2">
-                            <a href={`/api/sites/${site.id}/backups/${encodeURIComponent(backup.name)}/download`} className="px-2.5 py-1.5 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors" title="Endir">↓</a>
-                            <button onClick={() => handleDeleteBackup(backup.name)} className="px-2.5 py-1.5 text-xs text-red-400 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors" title="Sil">✕</button>
+                            <a href={`/api/sites/${site.id}/backups/${encodeURIComponent(backup.name)}/download`} className="px-2.5 py-1.5 text-xs text-accent border border-accent/30 rounded hover:bg-accent/10 transition-colors" title="Endir" aria-label="Backup-ı endir">↓</a>
+                            <button onClick={() => handleDeleteBackup(backup.name)} className="px-2.5 py-1.5 text-xs text-red-400 border border-red-400/30 rounded hover:bg-red-400/10 transition-colors" title="Sil" aria-label="Backup-ı sil">✕</button>
                           </div>
                         </div>
                       ))}
@@ -931,7 +931,7 @@ function EditFieldModal({
             </div>
             <span className="text-white font-heading font-semibold text-sm">{label}</span>
           </div>
-          <button onClick={close} className="text-text-muted hover:text-white transition-colors">
+          <button onClick={close} className="text-text-muted hover:text-white transition-colors" aria-label="Bağla">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

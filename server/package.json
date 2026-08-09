@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "adm-zip": "^0.5.18",
@@ -25,5 +26,8 @@
   },
   "overrides": {
     "whois": "2.15.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

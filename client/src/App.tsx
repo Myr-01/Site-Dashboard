@@ -25,6 +25,8 @@ function App() {
   const [showImport, setShowImport] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const { withAuth, showAuthModal, onAuthSuccess, onAuthClose } = useAuth();
 
   useEffect(() => {
@@ -69,10 +71,15 @@ function App() {
   const fetchSites = useCallback(async () => {
     try {
       const res = await fetch(apiUrl('/api/sites'));
+      if (!res.ok) throw new Error(`Server xətası: ${res.status}`);
       const data = await res.json();
       setSites(data);
+      setFetchError(null);
     } catch (err) {
       console.error('Failed to fetch sites:', err);
+      setFetchError('Saytlar yüklənə bilmədi. Server ilə əlaqə yoxlayın.');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -115,7 +122,7 @@ function App() {
             if (searchQuery === '') setShowSearch(false);
           }}
         >
-          <button className="p-2 text-text-muted hover:text-accent transition-colors">
+          <button className="p-2 text-text-muted hover:text-accent transition-colors" aria-label="Axtar">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -168,6 +175,13 @@ function App() {
         );
       })()}
 
+      {/* Error Banner */}
+      {fetchError && (
+        <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+          {fetchError}
+        </div>
+      )}
+
       {/* World Map (collapsible) */}
       {showMap && (
         <div className="mb-6">
@@ -176,7 +190,11 @@ function App() {
       )}
 
       {/* Sites Grid */}
-      {filteredSites.length === 0 && sites.length > 0 ? (
+      {isLoading ? (
+        <div className="text-center py-20">
+          <p className="text-text-muted text-lg">Yüklənir...</p>
+        </div>
+      ) : filteredSites.length === 0 && sites.length > 0 ? (
         <div className="text-center py-20">
           <p className="text-text-muted text-lg">"{searchQuery}" üzrə nəticə tapılmadı</p>
         </div>
