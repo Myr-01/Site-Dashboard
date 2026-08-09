@@ -5,6 +5,7 @@ import UptimeCalendar from './UptimeCalendar';
 import { authHeaders } from '../useAuth';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
+import { useEnterAnimation } from '../hooks/useEnterAnimation';
 
 interface SiteDetailModalProps {
   site: Site;
@@ -102,7 +103,9 @@ function daysColor(days: number | null): string {
 }
 
 export default function SiteDetailModal({ site: initialSite, onClose, onDelete }: SiteDetailModalProps) {
-  const [isVisible, setIsVisible] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const enterVisible = useEnterAnimation();
+  const isVisible = enterVisible && !isClosing;
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [backups, setBackups] = useState<SiteBackup[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -138,7 +141,6 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   };
 
   useEffect(() => {
-    setTimeout(() => setIsVisible(true), 10);
     fetchBackups();
     fetchSiteInfo();
     fetchCredentials();
@@ -241,7 +243,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   };
 
   const handleClose = () => {
-    setIsVisible(false);
+    setIsClosing(true);
     setTimeout(() => onClose(), 200);
   };
 
@@ -275,7 +277,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       onClick={handleClose}
     >
       <div
-        className={`bg-navy-surface border border-border rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col transition-all duration-200 ${
+        className={`bg-navy-surface border border-border rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col transition-[transform,opacity] duration-200 ${
           isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -704,7 +706,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   <button
                     onClick={saveNotes}
                     disabled={notesSaving}
-                    className="w-full py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-2.5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }}
                   >
                     {notesSaving ? 'Saxlanılır...' : 'Saxla'}
@@ -902,11 +904,11 @@ function EditFieldModal({
 }) {
   const [val, setVal] = useState(value);
   const [loading, setLoading] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const [isClosing2, setIsClosing2] = useState(false);
+  const enterVis2 = useEnterAnimation();
+  const visible = enterVis2 && !isClosing2;
 
-  useEffect(() => { setTimeout(() => setVisible(true), 10); }, []);
-
-  const close = () => { setVisible(false); setTimeout(onClose, 200); };
+  const close = () => { setIsClosing2(true); setTimeout(onClose, 200); };
   const save = async () => { setLoading(true); await onSave(val); setLoading(false); };
 
   return (
@@ -915,7 +917,7 @@ function EditFieldModal({
       onClick={close}
     >
       <div
-        className={`w-full max-w-sm mx-4 rounded-2xl border border-accent/20 shadow-2xl shadow-accent/10 transition-all duration-200 overflow-hidden ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'}`}
+        className={`w-full max-w-sm mx-4 rounded-2xl border border-accent/20 shadow-2xl shadow-accent/10 transition-[transform,opacity] duration-200 overflow-hidden ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'}`}
         style={{ background: 'linear-gradient(135deg, #14213d 0%, #1d2d4f 100%)' }}
         onClick={e => e.stopPropagation()}
       >
@@ -943,7 +945,7 @@ function EditFieldModal({
             onChange={e => setVal(e.target.value)}
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') close(); }}
-            className="w-full px-4 py-3 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-all"
+            className="w-full px-4 py-3 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-[border-color,box-shadow]"
             style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(252,163,17,0.25)' }}
             placeholder={type === 'date' ? 'YYYY-MM-DD' : `${label} daxil edin`}
           />
@@ -961,7 +963,7 @@ function EditFieldModal({
           <button
             onClick={save}
             disabled={loading}
-            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }}
           >
             {loading ? '...' : 'Saxla'}
@@ -1108,11 +1110,11 @@ function CredentialEditModal({
   const [password, setPassword] = useState(initial.password || '');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isClosing3, setIsClosing3] = useState(false);
+  const enterVis3 = useEnterAnimation();
+  const isVisible = enterVis3 && !isClosing3;
 
-  useEffect(() => { setTimeout(() => setIsVisible(true), 10); }, []);
-
-  const handleClose = () => { setIsVisible(false); setTimeout(onClose, 200); };
+  const handleClose = () => { setIsClosing3(true); setTimeout(onClose, 200); };
 
   const handleSave = async () => {
     // sessionStorage-da şifrə yoxdursa dialog ilə soruş
@@ -1169,7 +1171,7 @@ function CredentialEditModal({
       onClick={handleClose}
     >
       <div
-        className={`bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl transition-all duration-200 ${isVisible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'}`}
+        className={`bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl transition-[transform,opacity] duration-200 ${isVisible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'}`}
         onClick={e => e.stopPropagation()}
       >
         <h3 className="text-white font-heading font-bold text-lg mb-5">{title}</h3>

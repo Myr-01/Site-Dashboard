@@ -129,7 +129,7 @@ export default function WorldMap() {
             {locations.map(location => (
               <div
                 key={location.id}
-                className="flex items-center justify-between p-2 bg-navy-light rounded-lg hover:border hover:border-accent/30 transition-all"
+                className="flex items-center justify-between p-2 bg-navy-light rounded-lg hover:border hover:border-accent/30 transition-colors"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className={`w-2 h-2 rounded-full ${location.status === 'online' ? 'bg-green-400' : 'bg-red-400'}`}></div>

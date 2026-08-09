@@ -30,7 +30,7 @@ export default function SiteCard({ site, onDelete, onSelect }: SiteCardProps) {
 
   return (
     <div
-      className="bg-navy-surface border border-border rounded-xl p-5 cursor-pointer hover:border-accent/50 hover:shadow-lg hover:shadow-accent/5 transition-all duration-200 group"
+      className="bg-navy-surface border border-border rounded-xl p-5 cursor-pointer hover:border-accent/50 hover:shadow-lg hover:shadow-accent/5 transition-[border-color,box-shadow] duration-200 group"
       onClick={() => onSelect(site)}
     >
       {/* Header */}

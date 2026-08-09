@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useEnterAnimation } from '../hooks/useEnterAnimation';
 
 /* =============================================
    Universal Dialog Component
@@ -62,14 +63,14 @@ export function DialogProvider() {
 
 function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (v: string | boolean | null) => void }) {
   const [value, setValue] = useState(config.defaultValue || '');
-  const [visible, setVisible] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const enterVisible = useEnterAnimation();
+  const visible = enterVisible && !isClosing;
   const [showPass, setShowPass] = useState(false);
 
-  useEffect(() => { setTimeout(() => setVisible(true), 10); }, []);
-
   const close = (val: string | boolean | null) => {
-    setVisible(false);
-    setTimeout(() => onResolve(val), 180);
+    setIsClosing(true);
+    setTimeout(() => onResolve(val), 200);
   };
 
   const handleConfirm = () => {
@@ -87,12 +88,12 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center z-[80] transition-opacity duration-180 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      className={`fixed inset-0 flex items-center justify-center z-[80] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
       style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }}
       onClick={() => { if (isAlert) close(true); else handleCancel(); }}
     >
       <div
-        className={`w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl transition-all duration-180 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-3'}`}
+        className={`w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl transition-[transform,opacity] duration-200 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-3'}`}
         style={{
           background: 'linear-gradient(160deg, #14213d 0%, #1a2a4a 100%)',
           border: config.danger ? '1px solid rgba(239,68,68,0.35)' : '1px solid rgba(252,163,17,0.2)',
@@ -143,7 +144,7 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
                 onChange={e => setValue(e.target.value)}
                 autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') handleConfirm(); if (e.key === 'Escape') handleCancel(); }}
-                className="w-full px-4 py-3 rounded-xl text-white text-sm focus:outline-none focus:ring-2 transition-all"
+                className="w-full px-4 py-3 rounded-xl text-white text-sm focus:outline-none focus:ring-2 transition-[border-color,box-shadow]"
                 style={{
                   background: 'rgba(255,255,255,0.07)',
                   border: '1px solid rgba(252,163,17,0.25)',
@@ -186,7 +187,7 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
           )}
           <button
             onClick={handleConfirm}
-            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all hover:opacity-90"
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90"
             style={config.danger
               ? { background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff' }
               : { background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiUrl } from '../api';
+import { useEnterAnimation } from '../hooks/useEnterAnimation';
 
 interface AuthModalProps {
   onSuccess: () => void;
@@ -10,16 +11,17 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const enterVisible = useEnterAnimation();
+  const isVisible = enterVisible && !isClosing;
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setTimeout(() => setIsVisible(true), 10);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
   const handleClose = () => {
-    setIsVisible(false);
+    setIsClosing(true);
     setTimeout(onClose, 200);
   };
 
@@ -37,7 +39,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
       if (res.ok) {
         // Şifrəni session-da saxla
         sessionStorage.setItem('adminPassword', password);
-        setIsVisible(false);
+        setIsClosing(true);
         setTimeout(onSuccess, 200);
       } else {
         setError('Şifrə yanlışdır');
@@ -65,7 +67,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
       onClick={handleClose}
     >
       <div
-        className={`bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl transition-all duration-200 ${
+        className={`bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl transition-[transform,opacity] duration-200 ${
           isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'
         }`}
         onClick={(e) => e.stopPropagation()}

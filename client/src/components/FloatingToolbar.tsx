@@ -34,7 +34,7 @@ export default function FloatingToolbar({
 
       {/* Toolbar */}
       <div
-        className={`bg-navy-surface border border-border rounded-2xl p-1.5 md:p-2 flex flex-wrap items-center justify-center gap-0.5 md:gap-1 shadow-2xl transition-all duration-300 max-w-[95vw] ${
+        className={`bg-navy-surface border border-border rounded-2xl p-1.5 md:p-2 flex flex-wrap items-center justify-center gap-0.5 md:gap-1 shadow-2xl transition-[transform,opacity] duration-200 max-w-[95vw] ${
           isVisible ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'
         }`}
       >
