@@ -5,6 +5,7 @@ import dns from 'dns/promises';
 import { createRequire } from 'module';
 import { dbAll, dbGet, dbRun } from './db.js';
 import { sendDowntimeAlert } from './mailer.js';
+import { shouldRefreshCache } from './utils.js';
 
 // whois-json CJS paketidir — ESM mühitində createRequire ilə yükləyirik
 const require = createRequire(import.meta.url);
@@ -293,8 +294,7 @@ async function checkSite(site) {
     // WHOIS-u yalnız son yoxlamadan 12 saatdan çox keçibsə et
     const WHOIS_CACHE_HOURS = 12;
     const now = new Date();
-    const lastWhoisCheck = site.last_whois_check ? new Date(site.last_whois_check) : null;
-    const shouldCheckWhois = !lastWhoisCheck || (now - lastWhoisCheck) > WHOIS_CACHE_HOURS * 60 * 60 * 1000;
+    const shouldCheckWhois = shouldRefreshCache(site.last_whois_check, WHOIS_CACHE_HOURS);
 
     if (shouldCheckWhois) {
       const rootDomain = getRootDomain(hostname);
@@ -390,8 +390,7 @@ export async function runChecks(io) {
 
     // Store geo-location for server IP — yalnız 24 saatdan çox keçibsə sorğula
     const GEO_CACHE_HOURS = 24;
-    const lastGeoCheck = site.last_geo_check ? new Date(site.last_geo_check) : null;
-    const shouldCheckGeo = !lastGeoCheck || (Date.now() - lastGeoCheck.getTime()) > GEO_CACHE_HOURS * 60 * 60 * 1000;
+    const shouldCheckGeo = shouldRefreshCache(site.last_geo_check, GEO_CACHE_HOURS);
 
     if (result.server_ip && shouldCheckGeo) {
       try {

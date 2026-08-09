@@ -1,17 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Site } from './types';
 import StatsBar from './components/StatsBar';
 import SiteCard from './components/SiteCard';
-import SiteDetailModal from './components/SiteDetailModal';
 import AddSiteModal from './components/AddSiteModal';
-import SettingsModal from './components/SettingsModal';
-import ImportModal from './components/ImportModal';
 import FloatingToolbar from './components/FloatingToolbar';
 import WorldMap from './components/WorldMap';
 import AuthModal from './components/AuthModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './useAuth';
 import { apiUrl } from './api';
+
+const SiteDetailModal = lazy(() => import('./components/SiteDetailModal'));
+const SettingsModal = lazy(() => import('./components/SettingsModal'));
+const ImportModal = lazy(() => import('./components/ImportModal'));
 
 function App() {
   const [sites, setSites] = useState<Site[]>([]);
@@ -105,6 +107,7 @@ function App() {
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-bg p-4 md:p-8">
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
@@ -218,20 +221,34 @@ function App() {
 
       {/* Site Detail Pop-up */}
       {selectedSite && (
-        <SiteDetailModal
-          site={selectedSite}
-          onClose={() => setSelectedSite(null)}
-          onDelete={handleDelete}
-        />
+        <Suspense fallback={null}>
+          <ErrorBoundary>
+            <SiteDetailModal
+              site={selectedSite}
+              onClose={() => setSelectedSite(null)}
+              onDelete={handleDelete}
+            />
+          </ErrorBoundary>
+        </Suspense>
       )}
 
       {/* Modals */}
       {showAddModal && (
         <AddSiteModal onClose={() => setShowAddModal(false)} onAdded={fetchSites} />
       )}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <Suspense fallback={null}>
+          <ErrorBoundary>
+            <SettingsModal onClose={() => setShowSettings(false)} />
+          </ErrorBoundary>
+        </Suspense>
+      )}
       {showImport && (
-        <ImportModal onClose={() => setShowImport(false)} onImported={fetchSites} />
+        <Suspense fallback={null}>
+          <ErrorBoundary>
+            <ImportModal onClose={() => setShowImport(false)} onImported={fetchSites} />
+          </ErrorBoundary>
+        </Suspense>
       )}
 
       {/* Floating Toolbar */}
@@ -250,6 +267,7 @@ function App() {
         <AuthModal onSuccess={onAuthSuccess} onClose={onAuthClose} />
       )}
     </div>
+    </ErrorBoundary>
   );
 }
 

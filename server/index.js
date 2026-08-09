@@ -14,7 +14,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { initDb, dbRun, dbGet, dbAll } from './db.js';
-import { isSafeFilename } from './utils.js';
+import { isSafeFilename, createRequireAuth } from './utils.js';
 import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
@@ -97,14 +97,7 @@ app.post('/api/auth/verify', authLimiter, (req, res) => {
 });
 
 // Admin əməliyyatları üçün middleware
-function requireAuth(req, res, next) {
-  const token = req.headers['x-admin-password'];
-  if (token === ADMIN_PASSWORD) {
-    next();
-  } else {
-    res.status(401).json({ error: 'İcazə yoxdur' });
-  }
-}
+const requireAuth = createRequireAuth(ADMIN_PASSWORD);
 
 // Get all sites with latest check
 app.get('/api/sites', async (req, res) => {
