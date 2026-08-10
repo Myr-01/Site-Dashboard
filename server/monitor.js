@@ -58,6 +58,13 @@ async function sendWebhookNotification(site, result) {
         }
       }).catch(() => {});
     }
+
+    // Slack webhook (Incoming Webhook)
+    if (webhooks.slack_webhook) {
+      await axios.post(webhooks.slack_webhook, {
+        text: message,
+      }).catch(() => {});
+    }
   } catch (err) {
     console.error('Webhook notification failed:', err.message);
   }
@@ -457,6 +464,36 @@ export async function getAllSitesWithLatestCheck() {
   return results;
 }
 
+/**
+ * Köhnə detallı check qeydlərini sil ki, DB sonsuz böyüməsin.
+ *
+ * DİQQƏT — məlumat itkisi barədə: bu funksiya RETENTION_DAYS-dən köhnə **detallı**
+ * check sətirlərini birbaşa silir və əvvəlcə heç bir aggregate (gündəlik özet)
+ * saxlamır. Nəticədə:
+ *   - 30 günlük uptime faizi (getAllSitesWithLatestCheck) təsirlənmir, çünki o
+ *     yalnız son 30 günə baxır və retention müddəti ondan uzundur.
+ *   - Lakin RETENTION_DAYS-dən uzun dövrlər üçün (məs. keçmiş ayların
+ *     /api/sites/:id/report hesabatı) məlumat artıq mövcud olmayacaq və uptime
+ *     faizi hesablana bilməyəcək.
+ * Uzunmüddətli statistika lazım olduqda, silmədən əvvəl gündəlik özetləri ayrı
+ * bir cədvələ (məs. `checks_daily`) yazmaq lazımdır — hazırkı sadə versiya bunu etmir.
+ */
+async function cleanupOldChecks() {
+  const RETENTION_DAYS = 90;
+  try {
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const before = await dbGet('SELECT COUNT(*) as count FROM checks WHERE checked_at < ?', [cutoff]);
+    if (!before?.count) {
+      console.log(`Data cleanup: ${RETENTION_DAYS} gündən köhnə check qeydi yoxdur`);
+      return;
+    }
+    await dbRun('DELETE FROM checks WHERE checked_at < ?', [cutoff]);
+    console.log(`Data cleanup: ${before.count} köhnə check qeydi silindi (${RETENTION_DAYS} gündən köhnə)`);
+  } catch (err) {
+    console.error('Data cleanup failed:', err.message);
+  }
+}
+
 export function startMonitoring(io) {
   // Run immediately on start
   runChecks(io);
@@ -467,6 +504,10 @@ export function startMonitoring(io) {
   // Expiry xəbərdarlıqlarını hər 12 saatda bir yoxla
   checkExpiryAlerts();
   setInterval(() => checkExpiryAlerts(), 12 * 60 * 60 * 1000);
+
+  // Köhnə check məlumatlarını gündə bir dəfə təmizlə
+  cleanupOldChecks();
+  setInterval(() => cleanupOldChecks(), 24 * 60 * 60 * 1000);
 }
 
 // Response time yavaşlama xəbərdarlığı
@@ -645,6 +686,11 @@ async function sendExpiryNotification(message, webhooks, smtp, site) {
       await axios.post(webhooks.discord_webhook, {
         content,
         allowed_mentions: { parse: ['users'] }
+      }).catch(() => {});
+    }
+    if (webhooks.slack_webhook) {
+      await axios.post(webhooks.slack_webhook, {
+        text: message,
       }).catch(() => {});
     }
   }

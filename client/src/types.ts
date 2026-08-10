@@ -63,5 +63,6 @@ export interface WebhookSettings {
   telegram_webhook: string;
   discord_webhook: string;
   discord_user_id: string;
+  slack_webhook: string;
   message_template: string;
 }

@@ -28,6 +28,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     telegram_webhook: '',
     discord_webhook: '',
     discord_user_id: '',
+    slack_webhook: '',
     message_template: '',
   });
   const [loading, setLoading] = useState(false);
@@ -47,11 +48,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     fetch(apiUrl('/api/settings/webhooks'), { headers: { ...authHeaders() } })
       .then(res => res.json())
       .then(data => {
-        if (data.telegram_webhook || data.discord_webhook || data.discord_user_id || data.message_template) {
+        if (data.telegram_webhook || data.discord_webhook || data.discord_user_id || data.slack_webhook || data.message_template) {
           setWebhooks({
             telegram_webhook: data.telegram_webhook || '',
             discord_webhook: data.discord_webhook || '',
             discord_user_id: data.discord_user_id || '',
+            slack_webhook: data.slack_webhook || '',
             message_template: data.message_template || '',
           });
         }
@@ -90,6 +92,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       telegram_webhook: webhooks.telegram_webhook.trim(),
       discord_webhook: webhooks.discord_webhook.trim(),
       discord_user_id: webhooks.discord_user_id.trim(),
+      slack_webhook: webhooks.slack_webhook.trim(),
       message_template: webhooks.message_template.trim(),
     };
 
@@ -252,7 +255,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         ) : (
           <>
             <p className="text-text-muted text-sm mb-4">
-              Telegram və ya Discord webhook URL daxil edin. Sayt offline olanda avtomatik bildiriş göndəriləcək.
+              Telegram, Discord və ya Slack webhook URL daxil edin. Sayt offline olanda avtomatik bildiriş göndəriləcək.
             </p>
 
             <form onSubmit={handleSaveWebhooks} className="space-y-3">
@@ -296,6 +299,19 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 </p>
               </div>
               <div>
+                <label className="block text-text-muted text-xs mb-1">Slack Webhook URL</label>
+                <textarea
+                  value={webhooks.slack_webhook}
+                  onChange={e => setWebhooks({ ...webhooks, slack_webhook: e.target.value })}
+                  placeholder="https://hooks.slack.com/services/..."
+                  rows={2}
+                  className="w-full px-3 py-2 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors resize-none"
+                />
+                <p className="text-text-muted text-xs mt-1">
+                  Slack workspace-inizdə Incoming Webhook yaradın (Apps → Incoming Webhooks)
+                </p>
+              </div>
+              <div>
                 <label className="block text-text-muted text-xs mb-1">Mesaj Şablonu (opsional)</label>
                 <textarea
                   value={webhooks.message_template}
@@ -319,7 +335,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 <button
                   type="button"
                   onClick={async () => {
-                    if (!webhooks.telegram_webhook && !webhooks.discord_webhook) {
+                    if (!webhooks.telegram_webhook && !webhooks.discord_webhook && !webhooks.slack_webhook) {
                       setMessage('Xəta: Ən azı bir webhook URL daxil edin');
                       return;
                     }

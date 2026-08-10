@@ -19,6 +19,7 @@ import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
 import { analyzeBackup } from './backup-analyzer.js';
+import { generateSiteReportPDF } from './pdfReport.js';
 import { DATA_DIR } from './db.js';
 
 // Admin şifrəsi artıq plain text saxlanılmır — yalnız bcrypt hash-i.
@@ -121,6 +122,16 @@ const requireAuth = createRequireAuth(JWT_SECRET);
 
 // Opsional auth yoxlaması (401 qaytarmır) — cavabı admin/qonaq üçün fərqləndirmək lazım olanda
 const hasValidAdminToken = (req) => isValidAdminToken(req.headers['x-admin-token'], JWT_SECRET);
+
+// Fayl endirmə endpoint-ləri üçün: brauzerin `window.open`-i custom header göndərə bilmir,
+// ona görə token query parametrindən də qəbul edilir.
+// Kompromis: query-dəki token proxy/server log-larında görünə bilər — qısamüddətli JWT üçün
+// adətən qəbul edilən bir tradeoff-dur, amma header variantı üstünlük təşkil edir.
+function requireAuthFlexible(req, res, next) {
+  const token = req.headers['x-admin-token'] || req.query.token;
+  if (isValidAdminToken(token, JWT_SECRET)) return next();
+  res.status(401).json({ error: 'İcazə yoxdur və ya sessiya bitib' });
+}
 
 // Get all sites with latest check
 app.get('/api/sites', async (req, res) => {
@@ -307,6 +318,33 @@ app.get('/api/sites/:id/report', async (req, res) => {
   }
 });
 
+// PDF hesabat (fayl endirmə — token header-də və ya ?token= query-də ola bilər)
+app.get('/api/sites/:id/report/pdf', requireAuthFlexible, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const site = await dbGet('SELECT * FROM sites WHERE id = ?', [id]);
+    if (!site) return res.status(404).json({ error: 'Sayt tapılmadı' });
+
+    const checks = await dbAll(
+      'SELECT * FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT 500',
+      [id]
+    );
+    const incidents = await dbAll(
+      'SELECT * FROM incidents WHERE site_id = ? ORDER BY started_at DESC LIMIT 20',
+      [id]
+    );
+
+    generateSiteReportPDF(site, checks, incidents, res);
+  } catch (err) {
+    // Stream başlamışsa header göndərmək mümkün deyil
+    if (res.headersSent) {
+      res.end();
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
 // CSV import
 app.post('/api/import', requireAuth, upload.single('file'), async (req, res) => {
   try {
@@ -392,11 +430,12 @@ app.post('/api/settings/test-email', requireAuth, async (req, res) => {
 // Test webhook
 app.post('/api/settings/test-webhook', requireAuth, async (req, res) => {
   try {
-    const { telegram_webhook, discord_webhook, discord_user_id } = req.body;
+    const { telegram_webhook, discord_webhook, discord_user_id, slack_webhook } = req.body;
     const testMessage = '🧪 **Test Mesajı**\n\nWebhook konfiqurasiyası düzgün işləyir! ✅';
     
     let telegramSuccess = false;
     let discordSuccess = false;
+    let slackSuccess = false;
     let errors = [];
 
     // Telegram test
@@ -437,11 +476,26 @@ app.post('/api/settings/test-webhook', requireAuth, async (req, res) => {
       }
     }
 
-    if (telegramSuccess || discordSuccess) {
-      res.json({ 
-        success: true, 
-        message: `Test mesajı göndərildi: ${telegramSuccess ? 'Telegram ✓' : ''} ${discordSuccess ? 'Discord ✓' : ''}`
-      });
+    // Slack test
+    if (slack_webhook && slack_webhook.trim()) {
+      try {
+        const response = await axios.post(slack_webhook, { text: testMessage });
+        slackSuccess = true;
+        console.log('Slack test successful:', response.status);
+      } catch (err) {
+        const errMsg = err.response?.data || err.message;
+        console.error('Slack test failed:', errMsg);
+        errors.push(`Slack: ${typeof errMsg === 'string' ? errMsg : err.message}`);
+      }
+    }
+
+    if (telegramSuccess || discordSuccess || slackSuccess) {
+      const sent = [
+        telegramSuccess && 'Telegram ✓',
+        discordSuccess && 'Discord ✓',
+        slackSuccess && 'Slack ✓',
+      ].filter(Boolean).join(' ');
+      res.json({ success: true, message: `Test mesajı göndərildi: ${sent}` });
     } else {
       res.status(500).json({ error: errors.join(', ') || 'Heç bir webhook konfiqurasiya edilməyib' });
     }
@@ -454,8 +508,8 @@ app.post('/api/settings/test-webhook', requireAuth, async (req, res) => {
 // Save webhook settings
 app.post('/api/settings/webhooks', requireAuth, async (req, res) => {
   try {
-    const { telegram_webhook, discord_webhook, discord_user_id, message_template } = req.body;
-    const settings = JSON.stringify({ telegram_webhook, discord_webhook, discord_user_id, message_template });
+    const { telegram_webhook, discord_webhook, discord_user_id, slack_webhook, message_template } = req.body;
+    const settings = JSON.stringify({ telegram_webhook, discord_webhook, discord_user_id, slack_webhook, message_template });
     await dbRun(
       "INSERT OR REPLACE INTO settings (key, value) VALUES ('webhooks', ?)",
       [settings]
@@ -487,6 +541,7 @@ app.get('/api/settings/webhooks', async (req, res) => {
           ...data,
           telegram_webhook: maskUrl(data.telegram_webhook),
           discord_webhook: maskUrl(data.discord_webhook),
+          slack_webhook: maskUrl(data.slack_webhook),
         });
       }
     } else {

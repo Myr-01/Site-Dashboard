@@ -27,6 +27,7 @@ function App() {
   const [showImport, setShowImport] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const { withAuth, showAuthModal, onAuthSuccess, onAuthClose } = useAuth();
@@ -46,7 +47,11 @@ function App() {
       setSites(data);
     });
 
+    s.on('connect', () => setIsConnected(true));
+    s.on('disconnect', () => setIsConnected(false));
+
     s.on('connect_error', (err) => {
+      setIsConnected(false);
       console.error('Socket connection error:', err);
     });
 
@@ -140,6 +145,17 @@ function App() {
           />
         </div>
       </header>
+
+      {/* WebSocket bağlantı statusu */}
+      {!isConnected && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-4 py-2 rounded-lg mb-4 text-sm text-center"
+        >
+          Server ilə bağlantı kəsildi. Yenidən qoşulmağa çalışılır...
+        </div>
+      )}
 
       {/* Stats Bar */}
       <StatsBar sites={sites} />

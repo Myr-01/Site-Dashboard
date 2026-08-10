@@ -7,7 +7,7 @@ Tam funksional real-time sayt monitoring paneli.
 ## Funksiyalar
 
 ### Esas Monitorinq
-- Real-time sayt yoxlamasi (her 60 saniyede)
+- Avtomatik sayt yoxlamasi (her 30 deqiqede), neticeler WebSocket ile real-time paylanilir
 - Online / Offline status
 - HTTP status code
 - Response time (ms)
@@ -27,6 +27,7 @@ Tam funksional real-time sayt monitoring paneli.
 - Email (SMTP)
 - Telegram webhook
 - Discord webhook (@ ping)
+- Slack webhook (Incoming Webhook)
 - Offline xeberdarliq
 - Domain/Hosting bitme (3 gun + 1 gun)
 - SSL bitme (14 gun + 3 gun)
@@ -38,12 +39,20 @@ Tam funksional real-time sayt monitoring paneli.
 - Geo-location xeritesi
 - Incident log
 - Ayliq hesabat
+- PDF hesabat export
 
 ### Sayt Idareetmesi
 - Qruplar ve kateqoriyalar
 - Qeydler (notes)
 - Backup + analiz (.zip, .wpress)
 - CSV import
+
+### Tehlukesizlik ve Baxim
+- Admin shifresi bcrypt hash kimi saxlanilir (plain text yox)
+- JWT sessiya token-leri (7 gun), shifre her sorghuda goturulmur
+- Login brute-force limiti (5 deqiqede 10 cehd)
+- Kohne check melumatlari avtomatik temizlenir (90 gun retention)
+- WebSocket baghlanti statusu gostericisi
 
 ---
 
@@ -58,18 +67,97 @@ Tam funksional real-time sayt monitoring paneli.
 ## Qurashdirma
 
 ### Server
+
 ```bash
 cd server
 npm install
+cp .env.example .env
+```
+
+Sonra admin shifresini hash-e cevirin (ashaghida "Environment deyishenleri" bolmesine bax) ve serveri baslatin:
+
+```bash
 node index.js
-```n
+```
+
 ### Client
+
 ```bash
 cd client
 npm install
 npm run dev
-```n
+```
+
 Brauzer: http://localhost:5173
+
+---
+
+## Environment deyishenleri
+
+`server/.env` faylinda:
+
+| Deyishen | Mecburi | Tesvir |
+|----------|---------|--------|
+| `ADMIN_PASSWORD_HASH` | Beli | Admin shifresinin bcrypt hash-i. Teyin edilmezse admin girishi mumkun deyil |
+| `JWT_SECRET` | Production-da beli | Sessiya token-lerini imzalamaq ucun uzun tesadufi string |
+| `DATA_DIR` | Xeyr | SQLite ve backup-larin yerleshdiyi qovluq (Railway volume mount path) |
+| `FRONTEND_URL` | Xeyr | CORS ucun frontend origin-i |
+| `PORT` | Xeyr | Default 3001. Railway avtomatik teyin edir |
+| `NODE_ENV` | Xeyr | `production` / `development` |
+
+`client/.env` faylinda:
+
+| Deyishen | Tesvir |
+|----------|--------|
+| `VITE_API_URL` | Backend URL-i. Teyin edilmezse cari origin istifade olunur |
+
+### Shifreni hash-e cevirmek
+
+Admin shifresi artiq plain text saxlanilmir. Hash yaratmaq ucun:
+
+```bash
+cd server
+node scripts/hash-password.js
+```
+
+Script shifreni sorushacaq ve bcrypt hash cap edecek. Neticeni `.env` faylina yapishdirin:
+
+```
+ADMIN_PASSWORD_HASH=$2b$10$...
+```
+
+`JWT_SECRET` yaratmaq ucun:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+### Kohne `ADMIN_PASSWORD`-dan kecid (migration)
+
+Evvelki versiyalarda shifre `.env`-de `ADMIN_PASSWORD=` kimi plain text saxlanilirdi. Kecid ucun:
+
+1. `cd server && node scripts/hash-password.js` ishledin, movcud shifrenizi daxil edin
+2. Cixan hash-i `.env`-de `ADMIN_PASSWORD_HASH=` deyerine yapishdirin
+3. Kohne `ADMIN_PASSWORD=` setrini `.env`-den silin
+4. `JWT_SECRET=` setrini elave edin (yuxaridaki emrle yaradin)
+5. Serveri restart edin
+
+Frontend terefde de deyishiklik var: shifre artiq `sessionStorage`-da saxlanilmir, onun yerine JWT token saxlanilir. Brauzerde kohne sessiya varsa, tab-i baghlayib yeniden acin ve yeniden login olun.
+
+---
+
+## Testler
+
+```bash
+cd server && npm test
+cd client && npx vitest run
+```
+
+---
+
+## API
+
+Endpoint-lerin tam siyahisi ve auth teleblerine baxmaq ucun: [API.md](API.md)
 
 ---
 
@@ -80,7 +168,8 @@ Brauzer: http://localhost:5173
 | Deyishen | Deyer |
 |----------|-------|
 | DATA_DIR | /data |
-| ADMIN_PASSWORD | guclu_shifre |
+| ADMIN_PASSWORD_HASH | $2b$10$... (bcrypt hash) |
+| JWT_SECRET | uzun tesadufi string |
 | FRONTEND_URL | https://your-app.vercel.app |
 | NODE_ENV | production |
 

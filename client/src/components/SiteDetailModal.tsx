@@ -184,6 +184,25 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
     } catch {}
   };
 
+  // PDF hesabatı endir — window.open header göndərə bilmədiyi üçün token query parametrindədir
+  const handleDownloadPdf = async () => {
+    if (!getAdminToken()) {
+      const entered = await dialog.password();
+      if (!entered) return;
+      const ok = await loginWithPassword(entered as string);
+      if (!ok) {
+        clearAdminToken();
+        await dialog.alert('Şifrə yanlışdır', 'Xəta');
+        return;
+      }
+    }
+    const token = getAdminToken();
+    window.open(
+      apiUrl(`/api/sites/${site.id}/report/pdf`) + `?token=${encodeURIComponent(token as string)}`,
+      '_blank'
+    );
+  };
+
   const saveNotes = async () => {
     setNotesSaving(true);
     try {
@@ -369,6 +388,15 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
                   <div>
                     <UptimeCalendar siteId={site.id} days={30} />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      onClick={handleDownloadPdf}
+                      className="px-4 py-2 border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors text-sm"
+                    >
+                      PDF Hesabat Endir
+                    </button>
                   </div>
                 </div>
               )}
