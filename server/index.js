@@ -14,14 +14,24 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { initDb, dbRun, dbGet, dbAll } from './db.js';
-import { isSafeFilename, createRequireAuth } from './utils.js';
+import { isSafeFilename, createRequireAuth, verifyPassword, signAdminToken, isValidAdminToken } from './utils.js';
 import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
 import { analyzeBackup } from './backup-analyzer.js';
 import { DATA_DIR } from './db.js';
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+// Admin şifrəsi artıq plain text saxlanılmır — yalnız bcrypt hash-i.
+// Hash yaratmaq üçün: node scripts/hash-password.js
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-dəyiş-bunu-production-da';
+
+if (!ADMIN_PASSWORD_HASH) {
+  console.warn('XƏBƏRDARLIQ: ADMIN_PASSWORD_HASH təyin edilməyib — admin girişi mümkün olmayacaq. `node scripts/hash-password.js` işlədib .env-ə yaz.');
+}
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.warn('XƏBƏRDARLIQ: JWT_SECRET təyin edilməyib — production-da mütləq təsadüfi uzun bir dəyər təyin et.');
+}
 
 // Brute-force qorunması — login cəhdlərini limitlə
 const authLimiter = rateLimit({
@@ -87,18 +97,30 @@ if (fs.existsSync(clientDistPath)) {
 
 // === AUTH ===
 
-// Şifrəni yoxla
-app.post('/api/auth/verify', authLimiter, (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
-    res.json({ success: true });
-  } else {
-    res.status(401).json({ error: 'Şifrə yanlışdır' });
+// Şifrəni yoxla — uğurlu olduqda JWT sessiya token-i qaytar
+app.post('/api/auth/verify', authLimiter, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!ADMIN_PASSWORD_HASH) {
+      return res.status(500).json({ error: 'Server konfiqurasiyası tamamlanmayıb (ADMIN_PASSWORD_HASH yoxdur)' });
+    }
+    const valid = await verifyPassword(password, ADMIN_PASSWORD_HASH);
+    if (valid) {
+      const token = signAdminToken(JWT_SECRET);
+      res.json({ success: true, token });
+    } else {
+      res.status(401).json({ error: 'Şifrə yanlışdır' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Admin əməliyyatları üçün middleware
-const requireAuth = createRequireAuth(ADMIN_PASSWORD);
+// Admin əməliyyatları üçün middleware — JWT sessiya token-i yoxlanılır
+const requireAuth = createRequireAuth(JWT_SECRET);
+
+// Opsional auth yoxlaması (401 qaytarmır) — cavabı admin/qonaq üçün fərqləndirmək lazım olanda
+const hasValidAdminToken = (req) => isValidAdminToken(req.headers['x-admin-token'], JWT_SECRET);
 
 // Get all sites with latest check
 app.get('/api/sites', async (req, res) => {
@@ -458,8 +480,7 @@ app.get('/api/settings/webhooks', async (req, res) => {
     if (row) {
       const data = JSON.parse(row.value);
       // Admin auth varsa tam URL göstər, yoxsa maskala
-      const token = req.headers['x-admin-password'];
-      if (token === ADMIN_PASSWORD) {
+      if (hasValidAdminToken(req)) {
         res.json(data);
       } else {
         res.json({

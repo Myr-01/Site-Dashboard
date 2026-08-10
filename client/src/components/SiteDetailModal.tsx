@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Site, Incident } from '../types';
 import ResponseTimeChart from './ResponseTimeChart';
 import UptimeCalendar from './UptimeCalendar';
-import { authHeaders } from '../useAuth';
+import { authHeaders, getAdminToken, loginWithPassword, clearAdminToken } from '../useAuth';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
@@ -157,11 +157,10 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
   // Həssas sahələri yalnız admin login olduqda əldə et
   const fetchCredentials = async () => {
-    const pass = sessionStorage.getItem('adminPassword');
-    if (!pass) { setCredentials(null); return; }
+    if (!getAdminToken()) { setCredentials(null); return; }
     try {
       const res = await fetch(apiUrl(`/api/sites/${site.id}/credentials`), {
-        headers: { 'x-admin-password': pass },
+        headers: { ...authHeaders() },
       });
       if (res.ok) {
         setCredentials(await res.json());
@@ -188,16 +187,19 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const saveNotes = async () => {
     setNotesSaving(true);
     try {
-      let pass = sessionStorage.getItem('adminPassword');
-      if (!pass) {
+      if (!getAdminToken()) {
         const entered = await dialog.password();
         if (!entered) { setNotesSaving(false); return; }
-        pass = entered as string;
-        sessionStorage.setItem('adminPassword', pass);
+        const ok = await loginWithPassword(entered as string);
+        if (!ok) {
+          await dialog.alert('Şifrə yanlışdır', 'Xəta');
+          setNotesSaving(false);
+          return;
+        }
       }
       await fetch(apiUrl(`/api/sites/${site.id}/meta`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ notes: notesValue, group_name: groupValue }),
       });
       await refreshSite();
@@ -783,24 +785,16 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
           value={editField.value}
           type={editField.type}
           onSave={async (newValue) => {
-            // Şifrə yoxla
-            let pass = sessionStorage.getItem('adminPassword');
-            if (!pass) {
+            // Sessiya token-i yoxdursa şifrə soruş və token al
+            if (!getAdminToken()) {
               const entered = await dialog.password();
               if (!entered) return;
-              pass = entered as string;
-              sessionStorage.setItem('adminPassword', pass);
-            }
-            // Yoxla
-            const authRes = await fetch(apiUrl('/api/auth/verify'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ password: pass }),
-            });
-            if (!authRes.ok) {
-              sessionStorage.removeItem('adminPassword');
-              await dialog.alert('Şifrə yanlışdır', 'Xəta');
-              return;
+              const ok = await loginWithPassword(entered as string);
+              if (!ok) {
+                clearAdminToken();
+                await dialog.alert('Şifrə yanlışdır', 'Xəta');
+                return;
+              }
             }
 
             const body: Record<string, string | null> = {
@@ -814,7 +808,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
             await fetch(apiUrl(`/api/sites/${site.id}/manual-dates`), {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'x-admin-password': pass },
+              headers: { 'Content-Type': 'application/json', ...authHeaders() },
               body: JSON.stringify(body),
             });
             setEditField(null);
@@ -1117,13 +1111,16 @@ function CredentialEditModal({
   const handleClose = () => { setIsClosing3(true); setTimeout(onClose, 200); };
 
   const handleSave = async () => {
-    // sessionStorage-da şifrə yoxdursa dialog ilə soruş
-    let pass = sessionStorage.getItem('adminPassword');
-    if (!pass) {
+    // Sessiya token-i yoxdursa dialog ilə şifrə soruş və token al
+    if (!getAdminToken()) {
       const entered = await dialog.password();
       if (!entered) return;
-      pass = entered as string;
-      sessionStorage.setItem('adminPassword', pass);
+      const ok = await loginWithPassword(entered as string);
+      if (!ok) {
+        clearAdminToken();
+        await dialog.alert('Şifrə yanlışdır', 'Xəta');
+        return;
+      }
     }
 
     setLoading(true);
@@ -1142,14 +1139,14 @@ function CredentialEditModal({
 
       const res = await fetch(apiUrl(`/api/sites/${siteId}/credentials`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': pass },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
         const err = await res.json();
         if (res.status === 401) {
-          sessionStorage.removeItem('adminPassword');
-          await dialog.alert('Şifrə yanlışdır', 'Xəta');
+          clearAdminToken();
+          await dialog.alert('Sessiya bitib, yenidən giriş edin', 'Xəta');
         } else {
           await dialog.alert(`Xəta: ${err.error}`, 'Xəta');
         }

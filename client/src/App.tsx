@@ -8,7 +8,7 @@ import FloatingToolbar from './components/FloatingToolbar';
 import WorldMap from './components/WorldMap';
 import AuthModal from './components/AuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useAuth } from './useAuth';
+import { useAuth, authHeaders } from './useAuth';
 import { apiUrl } from './api';
 
 const SiteDetailModal = lazy(() => import('./components/SiteDetailModal'));
@@ -91,10 +91,9 @@ function App() {
 
   const handleDelete = async (id: number) => {
     try {
-      const pass = sessionStorage.getItem('adminPassword');
       const res = await fetch(apiUrl(`/api/sites/${id}`), {
         method: 'DELETE',
-        headers: pass ? { 'x-admin-password': pass } : {},
+        headers: { ...authHeaders() },
       });
       if (res.ok) {
         setSites(prev => prev.filter(s => s.id !== id));

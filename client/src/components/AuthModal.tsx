@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { apiUrl } from '../api';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
+import { loginWithPassword } from '../useAuth';
 
 interface AuthModalProps {
   onSuccess: () => void;
@@ -31,14 +31,9 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(apiUrl('/api/auth/verify'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      if (res.ok) {
-        // Şifrəni session-da saxla
-        sessionStorage.setItem('adminPassword', password);
+      // Uğurlu olduqda JWT token session-da saxlanılır (şifrənin özü yox)
+      const ok = await loginWithPassword(password);
+      if (ok) {
         setIsClosing(true);
         setTimeout(onSuccess, 200);
       } else {

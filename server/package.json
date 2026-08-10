@@ -10,6 +10,7 @@
   "dependencies": {
     "adm-zip": "^0.5.18",
     "axios": "^1.7.2",
+    "bcrypt": "5.1.1",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "csv-parse": "^5.5.6",
@@ -17,6 +18,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^8.6.2",
     "helmet": "^8.3.0",
+    "jsonwebtoken": "9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.14",
     "socket.io": "^4.7.5",

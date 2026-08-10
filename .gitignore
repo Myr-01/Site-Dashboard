@@ -7,6 +7,8 @@ server/node_modules/
 server/.env
 client/.env
 .env
+.env.backup
+*.env.backup
 
 # SQLite database
 server/monitor.db
