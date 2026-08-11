@@ -71,7 +71,17 @@
     .status-unknown { background: rgba(154, 163, 184, 0.1); color: var(--muted); }
     .uptime { color: var(--muted); font-size: 13px; margin-top: 4px; }
     .loading { color: var(--muted); text-align: center; padding: 40px 0; }
-    footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 28px; }
+    footer {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    footer p { margin: 4px 0; }
+    .credit strong { color: var(--accent); font-weight: 600; }
+    .credit .sep { opacity: 0.5; margin: 0 4px; }
     @media (max-width: 480px) {
       body { padding: 24px 14px; }
       h1 { font-size: 22px; }
@@ -86,7 +96,14 @@
     <div id="overall" hidden></div>
     <div id="sites-list" aria-live="polite"><p class="loading">Yüklənir...</p></div>
 
-    <footer id="updated"></footer>
+    <footer>
+      <p id="updated"></p>
+      <p class="credit">
+        &copy; <span id="year"></span> Site Monitor
+        <span class="sep">&middot;</span>
+        Made by <strong>Myr</strong>
+      </p>
+    </footer>
   </div>
 
   <script>
@@ -176,6 +193,8 @@
           document.getElementById('overall').hidden = true;
         });
     }
+
+    document.getElementById('year').textContent = new Date().getFullYear();
 
     loadStatus();
     setInterval(loadStatus, 60000);

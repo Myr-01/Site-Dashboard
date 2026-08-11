@@ -360,6 +360,15 @@ function App() {
         </div>
       )}
 
+      {/* Footer — pb-20: aşağıdaki floating toolbar-ın altında qalmasın */}
+      <footer className="mt-12 pb-20 text-center">
+        <p className="text-text-muted/70 text-xs">
+          © {new Date().getFullYear()} Site Monitor
+          <span className="mx-2 text-text-muted/40">·</span>
+          Made by <span className="text-accent font-medium">Myr</span>
+        </p>
+      </footer>
+
       {/* Site Detail Pop-up */}
       {selectedSite && (
         <Suspense fallback={null}>
