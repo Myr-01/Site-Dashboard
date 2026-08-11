@@ -7,9 +7,26 @@
 import readline from 'readline';
 import { hashPassword } from '../utils.js';
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const PROMPT = 'Admin şifrəsini daxil et: ';
 
-rl.question('Admin şifrəsini daxil et: ', async (password) => {
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: true,
+});
+
+// Yazılan şifrə terminalda (və scrollback/tarixçədə) görünməsin
+let muted = false;
+const originalWrite = rl._writeToOutput?.bind(rl);
+rl._writeToOutput = function (chunk) {
+  if (muted) return;
+  if (originalWrite) originalWrite(chunk);
+  else rl.output.write(chunk);
+};
+
+rl.question(PROMPT, async (password) => {
+  muted = false;
+  process.stdout.write('\n');
   if (!password || !password.trim()) {
     console.error('\nXəta: şifrə boş ola bilməz.');
     rl.close();
@@ -20,7 +37,7 @@ rl.question('Admin şifrəsini daxil et: ', async (password) => {
     const hash = await hashPassword(password);
     console.log('\nBu hash-i .env faylında ADMIN_PASSWORD_HASH= dəyərinə yapışdır:\n');
     console.log(hash);
-    console.log('\nKöhnə ADMIN_PASSWORD sətrini .env-dən silməyi unutma.');
+    console.log('\nSonra serveri restart et. Diqqət: hash-i .env.example-ə YAZMA — o fayl git-ə gedir.');
   } catch (err) {
     console.error('\nHash yaradıla bilmədi:', err.message);
     process.exitCode = 1;
@@ -28,3 +45,6 @@ rl.question('Admin şifrəsini daxil et: ', async (password) => {
     rl.close();
   }
 });
+
+// question() prompt-u yazandan sonra girişi maskala
+muted = true;

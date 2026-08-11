@@ -11,6 +11,16 @@ import { shouldRefreshCache, parseAlertDays } from './utils.js';
 const require = createRequire(import.meta.url);
 const whois = require('whois-json');
 
+// Monitorinq "tick"-i bu tezlikdə işləyir, amma hər saytın öz intervalı var
+const TICK_INTERVAL_MS = 60 * 1000; // 1 dəqiqə
+const TICK_TOLERANCE_MS = 5 * 1000; // tick sürüşməsi üçün tolerans
+const DEFAULT_CHECK_INTERVAL_MINUTES = 30;
+
+// site.id -> son real yoxlamanın vaxtı (ms).
+// Yaddaşdadır: server restart olanda sıfırlanır və bütün saytlar dərhal bir dəfə
+// yoxlanılır. Bu zərərsiz davranışdır, funksional problem deyil.
+const lastCheckedMap = new Map();
+
 // Default webhook message template
 const DEFAULT_TEMPLATE = '⚠️ **Sayt Offline Oldu**\n\n**Sayt:** {name}\n**URL:** {url}\n**Status:** {status}\n**Vaxt:** {time}';
 
@@ -26,6 +36,21 @@ function formatMessage(template, site, result) {
     .replace(/{hosting}/g, result.hosting_provider || 'Unknown');
 }
 
+/**
+ * Göndərilmiş bildirişi tarixçəyə yaz.
+ * Bildiriş artıq göndərildiyi üçün burada xəta funksiyanın davamını pozmamalıdır.
+ */
+async function logNotification(siteId, channel, message) {
+  try {
+    await dbRun(
+      'INSERT INTO notification_log (site_id, channel, message) VALUES (?, ?, ?)',
+      [siteId ?? null, channel, message]
+    );
+  } catch (err) {
+    console.error('Notification log failed:', err.message);
+  }
+}
+
 // Send webhook notifications
 async function sendWebhookNotification(site, result) {
   try {
@@ -35,13 +60,15 @@ async function sendWebhookNotification(site, result) {
     const webhooks = JSON.parse(row.value);
     const template = webhooks.message_template || DEFAULT_TEMPLATE;
     const message = formatMessage(template, site, result);
-    
+    const sentChannels = [];
+
     // Telegram webhook
     if (webhooks.telegram_webhook) {
       await axios.post(webhooks.telegram_webhook, {
         text: message,
         parse_mode: 'Markdown'
       }).catch(() => {});
+      sentChannels.push('telegram');
     }
     
     // Discord webhook - with optional user/role ping
@@ -57,6 +84,7 @@ async function sendWebhookNotification(site, result) {
           parse: ['users']
         }
       }).catch(() => {});
+      sentChannels.push('discord');
     }
 
     // Slack webhook (Incoming Webhook)
@@ -64,6 +92,11 @@ async function sendWebhookNotification(site, result) {
       await axios.post(webhooks.slack_webhook, {
         text: message,
       }).catch(() => {});
+      sentChannels.push('slack');
+    }
+
+    if (sentChannels.length > 0) {
+      await logNotification(site.id, sentChannels.join('+'), message);
     }
   } catch (err) {
     console.error('Webhook notification failed:', err.message);
@@ -345,7 +378,21 @@ export async function runChecks(io) {
   const sites = await dbAll('SELECT * FROM sites');
   if (sites.length === 0) return;
 
+  let checkedCount = 0;
+
   for (const site of sites) {
+    // Baxım rejimindəki saytlar yoxlanılmır, bildiriş getmir
+    if (site.maintenance_mode) continue;
+
+    // Sayt-bəsində interval: vaxtı gəlməyən saytları skip et
+    const intervalMs = (site.check_interval_minutes || DEFAULT_CHECK_INTERVAL_MINUTES) * 60 * 1000;
+    const lastChecked = lastCheckedMap.get(site.id) || 0;
+    // Tolerans: tick tam dəqiqə sərhədində düşməyəndə yoxlamanın bir tick geri qalmaması üçün
+    if (Date.now() - lastChecked < intervalMs - TICK_TOLERANCE_MS) continue;
+
+    lastCheckedMap.set(site.id, Date.now());
+    checkedCount++;
+
     const previousStatus = await getLastStatus(site.id);
     const result = await checkSite(site);
 
@@ -416,8 +463,17 @@ export async function runChecks(io) {
     }
   }
 
-  // Emit updated data to all connected clients
-  if (io) {
+  // Silinmiş saytların map qeydlərini təmizlə (yaddaş sızması olmasın)
+  if (lastCheckedMap.size > sites.length) {
+    const liveIds = new Set(sites.map(s => s.id));
+    for (const id of lastCheckedMap.keys()) {
+      if (!liveIds.has(id)) lastCheckedMap.delete(id);
+    }
+  }
+
+  // Yalnız real yoxlama olduqda yayımla — tick hər dəqiqə işlədiyi üçün
+  // heç nə dəyişməyəndə lüzumsuz sorğu və trafik yaratmayaq
+  if (io && checkedCount > 0) {
     const updatedSites = await getAllSitesWithLatestCheck();
     io.emit('sites-updated', updatedSites);
   }
@@ -427,6 +483,7 @@ export async function getAllSitesWithLatestCheck() {
   // Həssas sahələri (username/password) çıxarırıq — yalnız auth ilə ayrı endpoint-dən əldə edilə bilər
   const sites = await dbAll(`
     SELECT id, name, url, group_name, notes, created_at, color_tag, alert_days,
+           maintenance_mode, check_interval_minutes,
            manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry,
            domain_login_url, hosting_login_url
     FROM sites
@@ -498,8 +555,9 @@ export function startMonitoring(io) {
   // Run immediately on start
   runChecks(io);
 
-  // Then every 30 minutes
-  setInterval(() => runChecks(io), 30 * 60 * 1000);
+  // Hər 1 dəqiqədə "tick" — amma yalnız öz intervalı çatan saytlar real yoxlanılır.
+  // Tick özü yalnız yaddaşdaki vaxt müqayisəsidir, ona görə ucuzdur.
+  setInterval(() => runChecks(io), TICK_INTERVAL_MS);
 
   // Expiry xəbərdarlıqlarını hər 12 saatda bir yoxla
   checkExpiryAlerts();
@@ -559,6 +617,9 @@ async function checkExpiryAlerts() {
     const smtp = smtpRow ? JSON.parse(smtpRow.value) : null;
 
     for (const site of sites) {
+      // Baxım rejimindəki saytlar üçün expiry/SSL xəbərdarlığı da göndərilmir
+      if (site.maintenance_mode) continue;
+
       // Xəbərdarlıq günləri sayt üzrə fərdidir (sites.alert_days), yoxdursa default "3,1"
       const alertDays = parseAlertDays(site.alert_days);
 
@@ -671,13 +732,16 @@ function buildExpiryMessage(site, type, days, expiryDate) {
 }
 
 async function sendExpiryNotification(message, webhooks, smtp, site) {
-  // Discord / Telegram webhook
+  const sentChannels = [];
+
+  // Discord / Telegram / Slack webhook
   if (webhooks) {
     if (webhooks.telegram_webhook) {
       await axios.post(webhooks.telegram_webhook, {
         text: message,
         parse_mode: 'Markdown'
       }).catch(() => {});
+      sentChannels.push('telegram');
     }
     if (webhooks.discord_webhook) {
       let content = message;
@@ -688,11 +752,13 @@ async function sendExpiryNotification(message, webhooks, smtp, site) {
         content,
         allowed_mentions: { parse: ['users'] }
       }).catch(() => {});
+      sentChannels.push('discord');
     }
     if (webhooks.slack_webhook) {
       await axios.post(webhooks.slack_webhook, {
         text: message,
       }).catch(() => {});
+      sentChannels.push('slack');
     }
   }
 
@@ -701,6 +767,11 @@ async function sendExpiryNotification(message, webhooks, smtp, site) {
     try {
       const { sendExpiryEmail } = await import('./mailer.js');
       await sendExpiryEmail(site, message, smtp);
+      sentChannels.push('email');
     } catch {}
+  }
+
+  if (sentChannels.length > 0) {
+    await logNotification(site?.id, sentChannels.join('+'), message);
   }
 }

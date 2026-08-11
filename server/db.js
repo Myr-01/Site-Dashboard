@@ -181,6 +181,22 @@ export async function initDb() {
   try { await dbExec(`ALTER TABLE sites ADD COLUMN last_geo_check TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN color_tag TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN alert_days TEXT DEFAULT '3,1'`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN maintenance_mode INTEGER DEFAULT 0`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN check_interval_minutes INTEGER DEFAULT 30`); } catch {}
+
+  // Göndərilmiş bildirişlərin tarixçəsi (in-app)
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS notification_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER,
+      channel TEXT NOT NULL,
+      message TEXT NOT NULL,
+      sent_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+    );
+  `);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_notification_log_site_id ON notification_log(site_id)`);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_notification_log_sent_at ON notification_log(sent_at)`);
 
   // Incident log cədvəli
   await dbExec(`
@@ -191,10 +207,15 @@ export async function initDb() {
       resolved_at TEXT,
       duration_seconds INTEGER,
       http_code INTEGER,
+      resolution_note TEXT,
       FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
     );
   `);
   try { await dbExec(`CREATE INDEX IF NOT EXISTS idx_incidents_site_id ON incidents(site_id)`); } catch {}
+
+  // Migration: mövcud incidents cədvəlinə postmortem qeyd sütunu
+  // (CREATE TABLE-dan SONRA olmalıdır — əks halda təzə DB-də cədvəl hələ mövcud olmur)
+  try { await dbExec(`ALTER TABLE incidents ADD COLUMN resolution_note TEXT`); } catch {}
 }
 
 export default db;

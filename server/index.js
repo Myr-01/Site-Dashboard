@@ -188,6 +188,75 @@ app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
   }
 });
 
+// Baxım rejimini aç/bağla
+app.patch('/api/sites/:id/maintenance', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { maintenance_mode } = req.body;
+    const result = await dbRun('UPDATE sites SET maintenance_mode = ? WHERE id = ?', [maintenance_mode ? 1 : 0, id]);
+    if (result.changes === 0) return res.status(404).json({ error: 'Sayt tapılmadı' });
+    res.json({ success: true, maintenance_mode: !!maintenance_mode });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Yoxlama intervalını dəyiş (dəqiqə)
+app.patch('/api/sites/:id/interval', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const minutes = Number(req.body.check_interval_minutes);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
+      return res.status(400).json({ error: 'İnterval 1 ilə 1440 dəqiqə arasında tam ədəd olmalıdır' });
+    }
+    const result = await dbRun('UPDATE sites SET check_interval_minutes = ? WHERE id = ?', [minutes, id]);
+    if (result.changes === 0) return res.status(404).json({ error: 'Sayt tapılmadı' });
+    res.json({ success: true, check_interval_minutes: minutes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Hadisə üçün postmortem qeydi
+app.patch('/api/incidents/:id/note', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { resolution_note } = req.body;
+    const note = typeof resolution_note === 'string' && resolution_note.trim()
+      ? resolution_note.trim().slice(0, 2000)
+      : null;
+    const result = await dbRun('UPDATE incidents SET resolution_note = ? WHERE id = ?', [note, id]);
+    if (result.changes === 0) return res.status(404).json({ error: 'Hadisə tapılmadı' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Göndərilmiş bildirişlərin tarixçəsi
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const { site_id } = req.query;
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+
+    let query = `SELECT nl.id, nl.site_id, nl.channel, nl.message, nl.sent_at, s.name AS site_name
+                 FROM notification_log nl
+                 LEFT JOIN sites s ON nl.site_id = s.id`;
+    const params = [];
+    if (site_id) {
+      query += ' WHERE nl.site_id = ?';
+      params.push(site_id);
+    }
+    query += ' ORDER BY nl.sent_at DESC, nl.id DESC LIMIT ?';
+    params.push(limit);
+
+    const logs = await dbAll(query, params);
+    res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get access credentials for a site (READ) — auth tələb edir
 app.get('/api/sites/:id/credentials', requireAuth, async (req, res) => {
   try {
