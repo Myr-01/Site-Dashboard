@@ -179,6 +179,8 @@ export async function initDb() {
   try { await dbExec(`ALTER TABLE sites ADD COLUMN notes TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN last_whois_check TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN last_geo_check TEXT`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN color_tag TEXT`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN alert_days TEXT DEFAULT '3,1'`); } catch {}
 
   // Incident log cədvəli
   await dbExec(`

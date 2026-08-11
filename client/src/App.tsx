@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Site } from './types';
 import StatsBar from './components/StatsBar';
@@ -10,6 +10,7 @@ import AuthModal from './components/AuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth, authHeaders } from './useAuth';
 import { apiUrl } from './api';
+import { dialog } from './components/Dialog';
 
 const SiteDetailModal = lazy(() => import('./components/SiteDetailModal'));
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
@@ -30,6 +31,9 @@ function App() {
   const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const { withAuth, showAuthModal, onAuthSuccess, onAuthClose } = useAuth();
 
   useEffect(() => {
@@ -94,7 +98,7 @@ function App() {
     fetchSites();
   }, [fetchSites]);
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: number): Promise<boolean> => {
     try {
       const res = await fetch(apiUrl(`/api/sites/${id}`), {
         method: 'DELETE',
@@ -102,13 +106,80 @@ function App() {
       });
       if (res.ok) {
         setSites(prev => prev.filter(s => s.id !== id));
-      } else {
-        console.error('Failed to delete site: server returned', res.status);
+        return true;
       }
+      console.error('Failed to delete site: server returned', res.status);
+      return false;
     } catch (err) {
       console.error('Failed to delete site:', err);
+      return false;
     }
   };
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleBulkDelete = async () => {
+    const count = selectedIds.size;
+    const confirmed = await dialog.confirm(
+      `${count} saytı silmək istəyirsiniz? Bu əməliyyat geri qaytarıla bilməz.`,
+      'Təsdiq',
+      true
+    );
+    if (!confirmed) return;
+
+    // Ardıcıl sil — server-ə eyni anda çoxlu sorğu getməsin
+    let failed = 0;
+    for (const id of selectedIds) {
+      const ok = await handleDelete(id);
+      if (!ok) failed++;
+    }
+    exitSelectionMode();
+
+    if (failed > 0) {
+      await dialog.alert(`${count - failed} sayt silindi, ${failed} sayt silinə bilmədi.`, 'Qismən uğurlu');
+    }
+  };
+
+  // Klaviatura qısayolları
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Yazı yazarkən qısayollar işə düşməsin
+      const active = document.activeElement;
+      const tag = active?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (active as HTMLElement | null)?.isContentEditable) {
+        return;
+      }
+      // Modifikator basılıbsa brauzerin öz qısayollarına mane olmayaq
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === '/') {
+        e.preventDefault();
+        setShowSearch(true);
+        // Input açılma animasiyası başlayandan sonra fokusla
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        withAuth(() => setShowAddModal(true));
+      } else if (e.key === 'Escape' && selectionMode) {
+        exitSelectionMode();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [withAuth, selectionMode, exitSelectionMode]);
 
   return (
     <ErrorBoundary>
@@ -120,7 +191,27 @@ function App() {
             <span className="text-accent">●</span> Site Monitor
           </h1>
           <p className="text-text-muted text-sm mt-1">Real-time website monitoring dashboard</p>
+          <p className="text-text-muted/70 text-xs mt-1">
+            Qısayollar: <kbd className="px-1 py-0.5 bg-navy-surface border border-border rounded text-[10px]">/</kbd> axtar
+            {' · '}
+            <kbd className="px-1 py-0.5 bg-navy-surface border border-border rounded text-[10px]">n</kbd> yeni sayt
+          </p>
         </div>
+
+        <div className="flex items-center gap-2">
+          {/* Seçim rejimi */}
+          <button
+            onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+            aria-pressed={selectionMode}
+            className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors ${
+              selectionMode
+                ? 'bg-accent text-bg border-accent'
+                : 'bg-navy-surface border-border text-text-muted hover:text-white'
+            }`}
+          >
+            {selectionMode ? 'Seçimi bitir' : 'Seç'}
+          </button>
+
         {/* Search */}
         <div
           className="relative"
@@ -135,6 +226,7 @@ function App() {
             </svg>
           </button>
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -143,6 +235,7 @@ function App() {
               showSearch ? 'w-64 px-10 opacity-100' : 'w-10 px-0 opacity-0 pointer-events-none'
             }`}
           />
+        </div>
         </div>
       </header>
 
@@ -229,7 +322,15 @@ function App() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
           {filteredSites.map(site => (
-            <SiteCard key={site.id} site={site} onDelete={handleDelete} onSelect={setSelectedSite} />
+            <SiteCard
+              key={site.id}
+              site={site}
+              onDelete={handleDelete}
+              onSelect={setSelectedSite}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(site.id)}
+              onToggleSelect={toggleSelect}
+            />
           ))}
         </div>
       )}
@@ -276,6 +377,32 @@ function App() {
         onlineCount={sites.filter(s => s.latestCheck?.status === 'online').length}
         offlineCount={sites.filter(s => s.latestCheck?.status === 'offline').length}
       />
+
+      {/* Toplu əməliyyat paneli */}
+      {selectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-navy-surface border border-border rounded-lg px-4 py-3 flex gap-4 items-center shadow-lg">
+          <span className="text-sm text-text-muted">{selectedIds.size} sayt seçildi</span>
+          <button
+            onClick={() => setSelectedIds(new Set(filteredSites.map(s => s.id)))}
+            className="text-sm text-text-muted hover:text-white transition-colors"
+          >
+            Hamısını seç
+          </button>
+          <button
+            onClick={() => withAuth(handleBulkDelete)}
+            className="text-sm text-red-400 hover:text-red-300 transition-colors"
+          >
+            Sil
+          </button>
+          <button
+            onClick={exitSelectionMode}
+            className="text-sm text-text-muted hover:text-white transition-colors"
+            aria-label="Seçimi ləğv et"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Auth Modal */}
       {showAuthModal && (

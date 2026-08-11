@@ -1,9 +1,13 @@
 import { Site } from '../types';
+import { colorTagLabel } from '../colorTags';
 
 interface SiteCardProps {
   site: Site;
   onDelete: (id: number) => void;
   onSelect: (site: Site) => void;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: number) => void;
 }
 
 function getSeoScore(check: Site['latestCheck']): number {
@@ -23,20 +27,59 @@ function formatTime(dateStr: string | null | undefined): string {
   return date.toLocaleString();
 }
 
-export default function SiteCard({ site, onDelete, onSelect }: SiteCardProps) {
+export default function SiteCard({
+  site,
+  onDelete,
+  onSelect,
+  selectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+}: SiteCardProps) {
   const check = site.latestCheck;
   const isOnline = check?.status === 'online';
   const seoScore = getSeoScore(check);
 
+  // Seçim rejimində karta klikləmək detal modalını açmaq yerinə seçimi dəyişir
+  const handleCardClick = () => {
+    if (selectionMode) {
+      onToggleSelect?.(site.id);
+    } else {
+      onSelect(site);
+    }
+  };
+
   return (
     <div
-      className="bg-navy-surface border border-border rounded-xl p-5 cursor-pointer hover:border-accent/50 hover:shadow-lg hover:shadow-accent/5 transition-[border-color,box-shadow] duration-200 group"
-      onClick={() => onSelect(site)}
+      className={`relative bg-navy-surface border rounded-xl p-5 cursor-pointer hover:shadow-lg hover:shadow-accent/5 transition-[border-color,box-shadow] duration-200 group ${
+        isSelected ? 'border-accent' : 'border-border hover:border-accent/50'
+      }`}
+      onClick={handleCardClick}
     >
+      {/* Rəng etiketi */}
+      {site.color_tag && (
+        <div
+          className="w-2.5 h-2.5 rounded-full absolute top-3 left-3"
+          style={{ backgroundColor: site.color_tag }}
+          title={`Etiket: ${colorTagLabel(site.color_tag)}`}
+        />
+      )}
+
+      {/* Seçim checkbox-u */}
+      {selectionMode && (
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect?.(site.id)}
+          onClick={e => e.stopPropagation()}
+          aria-label={`${site.name} saytını seç`}
+          className="absolute top-3 right-3 w-4 h-4 accent-accent cursor-pointer z-10"
+        />
+      )}
+
       {/* Header */}
-      <div className="flex items-start justify-between mb-3">
+      <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pr-6' : ''}`}>
         <div className="flex-1 min-w-0">
-          <h3 className="font-heading font-semibold text-white truncate group-hover:text-accent transition-colors">
+          <h3 className={`font-heading font-semibold text-white truncate group-hover:text-accent transition-colors ${site.color_tag ? 'pl-4' : ''}`}>
             {site.name}
           </h3>
           <div className="flex items-center gap-2 mt-0.5">

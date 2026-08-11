@@ -78,6 +78,34 @@ export function createRequireAuth(jwtSecret) {
   };
 }
 
+// Xəbərdarlıq günlərinin default dəyəri (sayt üzrə fərdi dəyər yoxdursa)
+export const DEFAULT_ALERT_DAYS = '3,1';
+
+/**
+ * Vergüllə ayrılmış xəbərdarlıq günlərini massivə çevir.
+ * Yanlış/boş dəyərlərdə default-a qayıdır.
+ * @param {string|null|undefined} raw - məs. "30, 7,1"
+ * @returns {number[]} məs. [30, 7, 1]
+ */
+export function parseAlertDays(raw) {
+  const source = typeof raw === 'string' && raw.trim() ? raw : DEFAULT_ALERT_DAYS;
+  const days = source
+    .split(',')
+    .map(d => parseInt(String(d).trim(), 10))
+    .filter(d => Number.isInteger(d) && d > 0 && d <= 3650);
+  const unique = [...new Set(days)].sort((a, b) => b - a);
+  return unique.length > 0 ? unique : parseAlertDays(DEFAULT_ALERT_DAYS);
+}
+
+/**
+ * İstifadəçi girişini DB-də saxlanacaq normal formata çevir.
+ * @param {string|null|undefined} raw
+ * @returns {string} məs. "30,7,1"
+ */
+export function normalizeAlertDays(raw) {
+  return parseAlertDays(raw).join(',');
+}
+
 /**
  * Keş müddəti keçib-keçmədiyini yoxla.
  * @param {string|null} lastCheckedAt - ISO timestamp

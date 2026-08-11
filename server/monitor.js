@@ -5,7 +5,7 @@ import dns from 'dns/promises';
 import { createRequire } from 'module';
 import { dbAll, dbGet, dbRun } from './db.js';
 import { sendDowntimeAlert } from './mailer.js';
-import { shouldRefreshCache } from './utils.js';
+import { shouldRefreshCache, parseAlertDays } from './utils.js';
 
 // whois-json CJS paketidir — ESM mühitində createRequire ilə yükləyirik
 const require = createRequire(import.meta.url);
@@ -426,7 +426,7 @@ export async function runChecks(io) {
 export async function getAllSitesWithLatestCheck() {
   // Həssas sahələri (username/password) çıxarırıq — yalnız auth ilə ayrı endpoint-dən əldə edilə bilər
   const sites = await dbAll(`
-    SELECT id, name, url, group_name, notes, created_at,
+    SELECT id, name, url, group_name, notes, created_at, color_tag, alert_days,
            manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry,
            domain_login_url, hosting_login_url
     FROM sites
@@ -551,7 +551,6 @@ async function checkResponseTimeAlert(site, currentResponseTime) {
 // Domain və Hosting bitmə xəbərdarlıqları
 async function checkExpiryAlerts() {
   try {
-    const ALERT_DAYS = [3, 1]; // yalnız 3 gün və 1 gün qaldıqda
     const sites = await dbAll('SELECT * FROM sites');
     const webhooksRow = await dbGet("SELECT value FROM settings WHERE key = 'webhooks'");
     const smtpRow = await dbGet("SELECT value FROM settings WHERE key = 'smtp'");
@@ -560,11 +559,13 @@ async function checkExpiryAlerts() {
     const smtp = smtpRow ? JSON.parse(smtpRow.value) : null;
 
     for (const site of sites) {
+      // Xəbərdarlıq günləri sayt üzrə fərdidir (sites.alert_days), yoxdursa default "3,1"
+      const alertDays = parseAlertDays(site.alert_days);
 
       // === 1. Manual domain expiry ===
       if (site.manual_domain_expiry) {
         const days = Math.ceil((new Date(site.manual_domain_expiry) - new Date()) / (1000 * 60 * 60 * 24));
-        if (ALERT_DAYS.includes(days)) {
+        if (alertDays.includes(days)) {
           const key = `domain_manual_${days}d`;
           const alreadySent = await dbGet(
             "SELECT id FROM expiry_alerts WHERE site_id = ? AND alert_type = ? AND alerted_date = ?",
@@ -590,7 +591,7 @@ async function checkExpiryAlerts() {
       if (latestCheck?.domain_expiry && !site.manual_domain_expiry) {
         // Manual varsa WHOIS-i skip et (manual prioritetdir, dublikat olmasın)
         const days = Math.ceil((new Date(latestCheck.domain_expiry) - new Date()) / (1000 * 60 * 60 * 24));
-        if (ALERT_DAYS.includes(days)) {
+        if (alertDays.includes(days)) {
           const key = `domain_whois_${days}d`;
           const alreadySent = await dbGet(
             "SELECT id FROM expiry_alerts WHERE site_id = ? AND alert_type = ? AND alerted_date = ?",
@@ -611,7 +612,7 @@ async function checkExpiryAlerts() {
       // === 3. Manual hosting expiry ===
       if (site.manual_hosting_expiry) {
         const days = Math.ceil((new Date(site.manual_hosting_expiry) - new Date()) / (1000 * 60 * 60 * 24));
-        if (ALERT_DAYS.includes(days)) {
+        if (alertDays.includes(days)) {
           const key = `hosting_${days}d`;
           const alreadySent = await dbGet(
             "SELECT id FROM expiry_alerts WHERE site_id = ? AND alert_type = ? AND alerted_date = ?",

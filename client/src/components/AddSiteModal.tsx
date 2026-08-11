@@ -1,6 +1,7 @@
 ﻿import { useState } from 'react';
 import { authHeaders } from '../useAuth';
 import { apiUrl } from '../api';
+import { COLOR_TAGS } from '../colorTags';
 
 interface AddSiteModalProps {
   onClose: () => void;
@@ -10,6 +11,8 @@ interface AddSiteModalProps {
 export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [colorTag, setColorTag] = useState('');
+  const [alertDays, setAlertDays] = useState('3,1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -22,7 +25,7 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
       const res = await fetch(apiUrl('/api/sites'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ name, url }),
+        body: JSON.stringify({ name, url, color_tag: colorTag, alert_days: alertDays }),
       });
 
       const text = await res.text();
@@ -70,6 +73,43 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
               required
               className="w-full px-4 py-2.5 bg-navy-light border border-border rounded-lg text-white placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors"
             />
+          </div>
+          <div>
+            <label className="block text-text-muted text-sm mb-1.5">Rəng etiketi</label>
+            <div className="flex items-center gap-2">
+              {COLOR_TAGS.map(tag => {
+                const isSelected = colorTag === tag.value;
+                return (
+                  <button
+                    key={tag.value || 'none'}
+                    type="button"
+                    onClick={() => setColorTag(tag.value)}
+                    title={tag.label}
+                    aria-label={tag.label}
+                    aria-pressed={isSelected}
+                    className={`w-7 h-7 rounded-full border-2 transition-colors flex items-center justify-center ${
+                      isSelected ? 'border-accent' : 'border-border hover:border-text-muted'
+                    }`}
+                    style={tag.value ? { backgroundColor: tag.value } : undefined}
+                  >
+                    {!tag.value && <span className="text-text-muted text-xs leading-none">✕</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="block text-text-muted text-sm mb-1.5">Xəbərdarlıq günləri</label>
+            <input
+              type="text"
+              value={alertDays}
+              onChange={e => setAlertDays(e.target.value)}
+              placeholder="30,7,1"
+              className="w-full px-4 py-2.5 bg-navy-light border border-border rounded-lg text-white placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors"
+            />
+            <p className="text-text-muted text-xs mt-1">
+              Domain / hosting bitməsinə bu qədər gün qaldıqda bildiriş göndərilir. Vergüllə ayır.
+            </p>
           </div>
           {error && <p className="text-red-400 text-sm">{error}</p>}
           <div className="flex gap-3 pt-2">

@@ -3,6 +3,7 @@ import { Site, Incident } from '../types';
 import ResponseTimeChart from './ResponseTimeChart';
 import UptimeCalendar from './UptimeCalendar';
 import { authHeaders, getAdminToken, loginWithPassword, clearAdminToken } from '../useAuth';
+import { COLOR_TAGS } from '../colorTags';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
@@ -116,6 +117,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [notesValue, setNotesValue] = useState(initialSite.notes || '');
   const [groupValue, setGroupValue] = useState(initialSite.group_name || '');
+  const [colorTagValue, setColorTagValue] = useState(initialSite.color_tag || '');
+  const [alertDaysValue, setAlertDaysValue] = useState(initialSite.alert_days || '3,1');
   const [notesSaving, setNotesSaving] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [credentials, setCredentials] = useState<{
@@ -219,7 +222,12 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       await fetch(apiUrl(`/api/sites/${site.id}/meta`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({ notes: notesValue, group_name: groupValue }),
+        body: JSON.stringify({
+          notes: notesValue,
+          group_name: groupValue,
+          color_tag: colorTagValue,
+          alert_days: alertDaysValue,
+        }),
       });
       await refreshSite();
       await dialog.alert('Qeydlər saxlanıldı', 'Uğurlu');
@@ -722,6 +730,43 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                       className="w-full px-3 py-2.5 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
                     />
                     <p className="text-text-muted text-xs mt-1">Dashboard-da bu qrupa görə filtrə edə bilərsən</p>
+                  </div>
+                  <div>
+                    <label className="block text-text-muted text-xs mb-2 uppercase tracking-wider">Rəng etiketi</label>
+                    <div className="flex items-center gap-2">
+                      {COLOR_TAGS.map(tag => {
+                        const isSelected = colorTagValue === tag.value;
+                        return (
+                          <button
+                            key={tag.value || 'none'}
+                            type="button"
+                            onClick={() => setColorTagValue(tag.value)}
+                            title={tag.label}
+                            aria-label={tag.label}
+                            aria-pressed={isSelected}
+                            className={`w-7 h-7 rounded-full border-2 transition-colors flex items-center justify-center ${
+                              isSelected ? 'border-accent' : 'border-border hover:border-text-muted'
+                            }`}
+                            style={tag.value ? { backgroundColor: tag.value } : undefined}
+                          >
+                            {!tag.value && <span className="text-text-muted text-xs leading-none">✕</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-text-muted text-xs mb-2 uppercase tracking-wider">Xəbərdarlıq günləri</label>
+                    <input
+                      type="text"
+                      value={alertDaysValue}
+                      onChange={e => setAlertDaysValue(e.target.value)}
+                      placeholder="30,7,1"
+                      className="w-full px-3 py-2.5 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
+                    />
+                    <p className="text-text-muted text-xs mt-1">
+                      Domain / hosting bitməsinə bu qədər gün qaldıqda bildiriş göndərilir. Vergüllə ayır (məs. 30,7,1)
+                    </p>
                   </div>
                   <div>
                     <label className="block text-text-muted text-xs mb-2 uppercase tracking-wider">Qeydlər</label>

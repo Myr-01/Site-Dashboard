@@ -37,6 +37,8 @@ export interface Site {
   hosting_password?: string | null;
   group_name: string | null;
   notes: string | null;
+  color_tag: string | null;
+  alert_days: string | null;
   created_at: string;
   latestCheck: Check | null;
   uptime: number | null;

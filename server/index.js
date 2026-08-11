@@ -14,7 +14,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { initDb, dbRun, dbGet, dbAll } from './db.js';
-import { isSafeFilename, createRequireAuth, verifyPassword, signAdminToken, isValidAdminToken } from './utils.js';
+import { isSafeFilename, createRequireAuth, verifyPassword, signAdminToken, isValidAdminToken, normalizeAlertDays } from './utils.js';
 import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
@@ -146,11 +146,14 @@ app.get('/api/sites', async (req, res) => {
 // Add a site
 app.post('/api/sites', requireAuth, async (req, res) => {
   try {
-    const { name, url } = req.body;
+    const { name, url, color_tag, alert_days } = req.body;
     if (!name || !url) {
       return res.status(400).json({ error: 'Name and URL are required' });
     }
-    const result = await dbRun('INSERT INTO sites (name, url) VALUES (?, ?)', [name, url]);
+    const result = await dbRun(
+      'INSERT INTO sites (name, url, color_tag, alert_days) VALUES (?, ?, ?, ?)',
+      [name, url, color_tag || null, normalizeAlertDays(alert_days)]
+    );
     const site = await dbGet('SELECT * FROM sites WHERE id = ?', [result.lastID]);
     res.status(201).json(site);
   } catch (err) {
@@ -263,10 +266,10 @@ app.get('/api/sites/:id/incidents', async (req, res) => {
 app.post('/api/sites/:id/meta', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes, group_name } = req.body;
+    const { notes, group_name, color_tag, alert_days } = req.body;
     await dbRun(
-      'UPDATE sites SET notes = ?, group_name = ? WHERE id = ?',
-      [notes || null, group_name || null, id]
+      'UPDATE sites SET notes = ?, group_name = ?, color_tag = ?, alert_days = ? WHERE id = ?',
+      [notes || null, group_name || null, color_tag || null, normalizeAlertDays(alert_days), id]
     );
     res.json({ success: true });
   } catch (err) {
