@@ -39,6 +39,8 @@ export interface Site {
   notes: string | null;
   color_tag: string | null;
   alert_days: string | null;
+  maintenance_mode: number | null;
+  check_interval_minutes: number | null;
   created_at: string;
   latestCheck: Check | null;
   uptime: number | null;
@@ -51,6 +53,16 @@ export interface Incident {
   resolved_at: string | null;
   duration_seconds: number | null;
   http_code: number | null;
+  resolution_note: string | null;
+}
+
+export interface NotificationLogEntry {
+  id: number;
+  site_id: number | null;
+  site_name: string | null;
+  channel: string;
+  message: string;
+  sent_at: string;
 }
 
 export interface SmtpSettings {

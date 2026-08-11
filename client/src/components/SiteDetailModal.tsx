@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Site, Incident } from '../types';
 import ResponseTimeChart from './ResponseTimeChart';
 import UptimeCalendar from './UptimeCalendar';
+import NotificationHistory from './NotificationHistory';
 import { authHeaders, getAdminToken, loginWithPassword, clearAdminToken } from '../useAuth';
 import { COLOR_TAGS } from '../colorTags';
 import { dialog } from './Dialog';
@@ -85,7 +86,7 @@ interface SiteInfo {
   };
 }
 
-type TabKey = 'overview' | 'domain' | 'seo' | 'info' | 'backups' | 'incidents' | 'notes';
+type TabKey = 'overview' | 'domain' | 'seo' | 'info' | 'backups' | 'incidents' | 'notifications' | 'notes';
 
 function getSeoScore(check: Site['latestCheck']): number {
   if (!check) return 0;
@@ -119,6 +120,10 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const [groupValue, setGroupValue] = useState(initialSite.group_name || '');
   const [colorTagValue, setColorTagValue] = useState(initialSite.color_tag || '');
   const [alertDaysValue, setAlertDaysValue] = useState(initialSite.alert_days || '3,1');
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
+  const [intervalSaving, setIntervalSaving] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [noteText, setNoteText] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [credentials, setCredentials] = useState<{
@@ -130,6 +135,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const fileInputRef = useRef<HTMLInputElement>(null);
   const check = site.latestCheck;
   const isOnline = check?.status === 'online';
+  const isMaintenance = !!site.maintenance_mode;
   const seoScore = getSeoScore(check);
   const E = siteInfo?.extra_info;
 
@@ -185,6 +191,76 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       const res = await fetch(apiUrl(`/api/sites/${site.id}/report`));
       setReport(await res.json());
     } catch {}
+  };
+
+  // Admin sessiyasını təmin et — yoxdursa şifrə soruş və token al
+  const ensureAuth = async (): Promise<boolean> => {
+    if (getAdminToken()) return true;
+    const entered = await dialog.password();
+    if (!entered) return false;
+    const ok = await loginWithPassword(entered as string);
+    if (!ok) {
+      clearAdminToken();
+      await dialog.alert('Şifrə yanlışdır', 'Xəta');
+      return false;
+    }
+    return true;
+  };
+
+  const toggleMaintenance = async () => {
+    if (!(await ensureAuth())) return;
+    setMaintenanceSaving(true);
+    try {
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/maintenance`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ maintenance_mode: !site.maintenance_mode }),
+      });
+      if (!res.ok) throw new Error('Baxım rejimi dəyişdirilə bilmədi');
+      await refreshSite();
+    } catch (err) {
+      await dialog.alert(err instanceof Error ? err.message : 'Xəta baş verdi', 'Xəta');
+    } finally {
+      setMaintenanceSaving(false);
+    }
+  };
+
+  const changeInterval = async (minutes: number) => {
+    if (!(await ensureAuth())) return;
+    setIntervalSaving(true);
+    try {
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/interval`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ check_interval_minutes: minutes }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'İnterval dəyişdirilə bilmədi');
+      }
+      await refreshSite();
+    } catch (err) {
+      await dialog.alert(err instanceof Error ? err.message : 'Xəta baş verdi', 'Xəta');
+    } finally {
+      setIntervalSaving(false);
+    }
+  };
+
+  const saveIncidentNote = async (incidentId: number) => {
+    if (!(await ensureAuth())) return;
+    try {
+      const res = await fetch(apiUrl(`/api/incidents/${incidentId}/note`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ resolution_note: noteText }),
+      });
+      if (!res.ok) throw new Error('Qeyd saxlanıla bilmədi');
+      setEditingNoteId(null);
+      setNoteText('');
+      await fetchIncidents();
+    } catch (err) {
+      await dialog.alert(err instanceof Error ? err.message : 'Xəta baş verdi', 'Xəta');
+    }
   };
 
   // PDF hesabatı endir — window.open header göndərə bilmədiyi üçün token query parametrindədir
@@ -293,6 +369,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
     { key: 'domain', label: 'Domain & SSL' },
     { key: 'seo', label: 'SEO' },
     { key: 'incidents', label: `Hadisələr${incidents.length > 0 ? ` (${incidents.length})` : ''}` },
+    { key: 'notifications', label: 'Bildirişlər' },
     { key: 'notes', label: 'Qeydlər' },
     { key: 'info', label: 'Bilgilər' },
     { key: 'backups', label: 'Backup' },
@@ -317,14 +394,21 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
                 <h2 className="font-heading font-bold text-white text-xl truncate">{site.name}</h2>
-                <span
-                  className={`px-2.5 py-0.5 text-xs font-bold rounded-full flex items-center gap-1.5 ${
-                    isOnline ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
-                  {isOnline ? 'ONLINE' : 'OFFLINE'}
-                </span>
+                {isMaintenance ? (
+                  <span className="px-2.5 py-0.5 text-xs font-bold rounded-full flex items-center gap-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                    BAXIMDA
+                  </span>
+                ) : (
+                  <span
+                    className={`px-2.5 py-0.5 text-xs font-bold rounded-full flex items-center gap-1.5 ${
+                      isOnline ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                    {isOnline ? 'ONLINE' : 'OFFLINE'}
+                  </span>
+                )}
               </div>
               <a
                 href={site.url}
@@ -396,6 +480,59 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
                   <div>
                     <UptimeCalendar siteId={site.id} days={30} />
+                  </div>
+
+                  {/* Monitorinq parametrləri */}
+                  <div className="bg-navy-light rounded-lg p-4 space-y-3">
+                    <h4 className="text-accent text-xs font-heading font-semibold uppercase tracking-wider">
+                      Monitorinq
+                    </h4>
+
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <p className="text-white text-sm">Yoxlama intervalı</p>
+                        <p className="text-text-muted text-xs">Bu sayt nə qədər tez-tez yoxlanılsın</p>
+                      </div>
+                      <select
+                        value={site.check_interval_minutes ?? 30}
+                        onChange={e => changeInterval(Number(e.target.value))}
+                        disabled={intervalSaving}
+                        aria-label="Yoxlama intervalı"
+                        className="px-3 py-2 bg-navy-surface border border-border rounded-lg text-white text-sm focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
+                      >
+                        <option value={5}>5 dəqiqə</option>
+                        <option value={15}>15 dəqiqə</option>
+                        <option value={30}>30 dəqiqə (default)</option>
+                        <option value={60}>1 saat</option>
+                        <option value={360}>6 saat</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 flex-wrap border-t border-border pt-3">
+                      <div>
+                        <p className="text-white text-sm">Baxım rejimi</p>
+                        <p className="text-text-muted text-xs">
+                          {isMaintenance
+                            ? 'Sayt yoxlanılmır, bildiriş göndərilmir'
+                            : 'Planlı işlər zamanı yanlış xəbərdarlıqları dayandırır'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={toggleMaintenance}
+                        disabled={maintenanceSaving}
+                        className={`px-4 py-2 rounded-lg text-sm border transition-colors disabled:opacity-50 ${
+                          isMaintenance
+                            ? 'border-blue-500/40 text-blue-400 hover:bg-blue-500/10'
+                            : 'border-accent text-accent hover:bg-accent/10'
+                        }`}
+                      >
+                        {maintenanceSaving
+                          ? 'Saxlanılır...'
+                          : isMaintenance
+                          ? 'Baxımı bitir'
+                          : 'Baxım rejiminə keç'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex justify-end pt-1">
@@ -708,12 +845,73 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                                   <span className="text-green-400 text-xs flex-shrink-0">Həll edildi</span>
                                 )}
                               </div>
+
+                              {/* Postmortem qeydi — yalnız bitmiş hadisələr üçün */}
+                              {inc.resolved_at && (
+                                <div className="mt-2 ml-4">
+                                  {editingNoteId === inc.id ? (
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="text"
+                                        value={noteText}
+                                        onChange={e => setNoteText(e.target.value)}
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter') saveIncidentNote(inc.id);
+                                          if (e.key === 'Escape') { setEditingNoteId(null); setNoteText(''); }
+                                        }}
+                                        autoFocus
+                                        placeholder="Nə səbəbdən idi, necə həll etdin..."
+                                        className="flex-1 text-xs px-2 py-1.5 rounded bg-navy-surface border border-border text-white placeholder:text-text-muted/40 focus:outline-none focus:border-accent"
+                                      />
+                                      <button
+                                        onClick={() => saveIncidentNote(inc.id)}
+                                        className="text-xs text-accent hover:underline flex-shrink-0"
+                                      >
+                                        Saxla
+                                      </button>
+                                      <button
+                                        onClick={() => { setEditingNoteId(null); setNoteText(''); }}
+                                        className="text-xs text-text-muted hover:text-white flex-shrink-0"
+                                      >
+                                        Ləğv
+                                      </button>
+                                    </div>
+                                  ) : inc.resolution_note ? (
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p className="text-text-muted text-xs italic">"{inc.resolution_note}"</p>
+                                      <button
+                                        onClick={() => { setEditingNoteId(inc.id); setNoteText(inc.resolution_note || ''); }}
+                                        className="text-xs text-accent hover:underline flex-shrink-0"
+                                      >
+                                        Redaktə
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setEditingNoteId(inc.id); setNoteText(''); }}
+                                      className="text-xs text-accent hover:underline"
+                                    >
+                                      + Qeyd əlavə et
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* ===== NOTIFICATIONS ===== */}
+              {activeTab === 'notifications' && (
+                <div className="space-y-3">
+                  <h4 className="text-accent text-xs font-heading font-semibold uppercase tracking-wider">
+                    Göndərilmiş bildirişlər
+                  </h4>
+                  <NotificationHistory siteId={site.id} />
                 </div>
               )}
 
