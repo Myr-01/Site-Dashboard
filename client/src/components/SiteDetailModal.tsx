@@ -3,6 +3,7 @@ import { Site, Incident } from '../types';
 import ResponseTimeChart from './ResponseTimeChart';
 import UptimeCalendar from './UptimeCalendar';
 import NotificationHistory from './NotificationHistory';
+import TrendChart from './TrendChart';
 import { authHeaders, getAdminToken, loginWithPassword, clearAdminToken } from '../useAuth';
 import { COLOR_TAGS } from '../colorTags';
 import { dialog } from './Dialog';
@@ -163,6 +164,13 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       }
     } catch {}
   };
+
+  // App-dəki `sites` yenilənəndə (socket event) prop dəyişir — modalın daxili
+  // state-ini də uyğunlaşdır, əks halda modal və kart bir-birindən ayrılır
+  useEffect(() => {
+    setSite(initialSite);
+    syncFormFromSite(initialSite);
+  }, [initialSite]);
 
   useEffect(() => {
     // Modal açılanda serverdən təzə data götür — App-dən gələn obyekt köhnə ola bilər
@@ -504,6 +512,13 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                     <h4 className="text-accent text-xs font-heading font-semibold uppercase tracking-wider mb-3">Cavab müddəti (24 saat)</h4>
                     <div className="bg-navy-light rounded-lg p-4">
                       <ResponseTimeChart siteId={site.id} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-accent text-xs font-heading font-semibold uppercase tracking-wider mb-3">Uzunmüddətli trend</h4>
+                    <div className="bg-navy-light rounded-lg p-4">
+                      <TrendChart siteId={site.id} />
                     </div>
                   </div>
 

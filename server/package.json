@@ -26,6 +26,7 @@
     "socket.io": "^4.7.5",
     "sqlite3": "^5.1.7",
     "ssl-checker": "^2.0.8",
+    "web-push": "^3.6.7",
     "whois-json": "^2.0.4"
   },
   "overrides": {

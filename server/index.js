@@ -20,6 +20,7 @@ import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
 import { analyzeBackup } from './backup-analyzer.js';
 import { generateSiteReportPDF } from './pdfReport.js';
+import { initPush, isPushEnabled, sendPushNotification } from './push.js';
 import { DATA_DIR } from './db.js';
 
 // Admin şifrəsi artıq plain text saxlanılmır — yalnız bcrypt hash-i.
@@ -130,6 +131,23 @@ const requireAuth = createRequireAuth(JWT_SECRET);
 // Opsional auth yoxlaması (401 qaytarmır) — cavabı admin/qonaq üçün fərqləndirmək lazım olanda
 const hasValidAdminToken = (req) => isValidAdminToken(req.headers['x-admin-token'], JWT_SECRET);
 
+/**
+ * Sayt datası dəyişdikdən sonra bütün qoşulu klientlərə dərhal yayımla.
+ *
+ * Monitorinq dövrü də `sites-updated` yayımlayır, amma o, yalnız real yoxlama
+ * olduqda (30 dəqiqəyə qədər gecikmə ilə) işə düşür. Baxım rejimi, interval,
+ * qeydlər kimi əl ilə edilən dəyişikliklər dərhal görünməlidir — əks halda
+ * dashboard-dakı kart köhnə qalır və istifadəçi səhifəni yeniləməyə məcbur olur.
+ */
+async function emitSitesUpdated() {
+  try {
+    const sites = await getAllSitesWithLatestCheck();
+    io.emit('sites-updated', sites);
+  } catch (err) {
+    console.error('sites-updated yayımlanmadı:', err.message);
+  }
+}
+
 // Fayl endirmə endpoint-ləri üçün: brauzerin `window.open`-i custom header göndərə bilmir,
 // ona görə token query parametrindən də qəbul edilir.
 // Kompromis: query-dəki token proxy/server log-larında görünə bilər — qısamüddətli JWT üçün
@@ -163,6 +181,7 @@ app.post('/api/sites', requireAuth, async (req, res) => {
     );
     const site = await dbGet('SELECT * FROM sites WHERE id = ?', [result.lastID]);
     res.status(201).json(site);
+    emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -175,6 +194,7 @@ app.delete('/api/sites/:id', requireAuth, async (req, res) => {
     await dbRun('DELETE FROM checks WHERE site_id = ?', [id]);
     await dbRun('DELETE FROM sites WHERE id = ?', [id]);
     res.json({ success: true });
+    emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -190,6 +210,7 @@ app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
       [manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry, id]
     );
     res.json({ success: true });
+    emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -203,6 +224,7 @@ app.patch('/api/sites/:id/maintenance', requireAuth, async (req, res) => {
     const result = await dbRun('UPDATE sites SET maintenance_mode = ? WHERE id = ?', [maintenance_mode ? 1 : 0, id]);
     if (result.changes === 0) return res.status(404).json({ error: 'Sayt tapılmadı' });
     res.json({ success: true, maintenance_mode: !!maintenance_mode });
+    emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -219,6 +241,7 @@ app.patch('/api/sites/:id/interval', requireAuth, async (req, res) => {
     const result = await dbRun('UPDATE sites SET check_interval_minutes = ? WHERE id = ?', [minutes, id]);
     if (result.changes === 0) return res.status(404).json({ error: 'Sayt tapılmadı' });
     res.json({ success: true, check_interval_minutes: minutes });
+    emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -233,6 +256,7 @@ app.patch('/api/incidents/:id/note', requireAuth, async (req, res) => {
       ? resolution_note.trim().slice(0, 2000)
       : null;
     const result = await dbRun('UPDATE incidents SET resolution_note = ? WHERE id = ?', [note, id]);
+    // Incident qeydi sayt kartında görünmür — yayım lazım deyil
     if (result.changes === 0) return res.status(404).json({ error: 'Hadisə tapılmadı' });
     res.json({ success: true });
   } catch (err) {
@@ -259,6 +283,87 @@ app.get('/api/notifications', async (req, res) => {
 
     const logs = await dbAll(query, params);
     res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === PUSH BİLDİRİŞLƏRİ ===
+
+app.get('/api/push/vapid-public-key', (req, res) => {
+  if (!isPushEnabled()) {
+    return res.status(503).json({ error: 'Push bildirişləri konfiqurasiya edilməyib' });
+  }
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/push/subscribe', requireAuth, async (req, res) => {
+  try {
+    const subscription = req.body;
+    if (!subscription?.endpoint || typeof subscription.endpoint !== 'string') {
+      return res.status(400).json({ error: 'Yanlış abunəlik məlumatı' });
+    }
+    await dbRun(
+      'INSERT OR REPLACE INTO push_subscriptions (endpoint, subscription_json) VALUES (?, ?)',
+      [subscription.endpoint, JSON.stringify(subscription)]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/push/unsubscribe', requireAuth, async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (!endpoint) return res.status(400).json({ error: 'endpoint tələb olunur' });
+    await dbRun('DELETE FROM push_subscriptions WHERE endpoint = ?', [endpoint]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Abunəliyin işlədiyini yoxlamaq üçün test bildirişi
+app.post('/api/push/test', requireAuth, async (req, res) => {
+  try {
+    if (!isPushEnabled()) {
+      return res.status(503).json({ error: 'Push bildirişləri konfiqurasiya edilməyib' });
+    }
+    const total = await dbGet('SELECT COUNT(*) AS n FROM push_subscriptions');
+    if (!total.n) {
+      return res.status(400).json({ error: 'Aktiv abunəlik yoxdur. Əvvəlcə bildirişləri aktivləşdirin.' });
+    }
+
+    const sent = await sendPushNotification(
+      'Test bildirişi',
+      'Brauzer bildirişləri düzgün işləyir.'
+    );
+    if (sent === 0) {
+      return res.status(502).json({
+        error: `${total.n} abunəlik var, amma heç birinə çatdırılmadı. Bildirişləri yenidən aktivləşdirməyi sınayın.`,
+      });
+    }
+    res.json({ success: true, sent });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === TREND (uzunmüddətli aggregate statistika) ===
+
+app.get('/api/sites/:id/trend', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const stats = await dbAll(
+      `SELECT date, avg_response_time, uptime_percent, total_checks
+       FROM daily_stats
+       WHERE site_id = ? AND date > date('now', '-' || ? || ' days')
+       ORDER BY date ASC`,
+      [id, days]
+    );
+    res.json(stats);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -416,6 +521,7 @@ app.post('/api/config/import', requireAuth, async (req, res) => {
     }
 
     res.json({ success: true, imported, skipped });
+    if (imported > 0) emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -505,6 +611,7 @@ app.post('/api/sites/:id/meta', requireAuth, async (req, res) => {
       [notes || null, group_name || null, color_tag || null, normalizeAlertDays(alert_days), id]
     );
     res.json({ success: true });
+    emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -616,6 +723,7 @@ app.post('/api/import', requireAuth, upload.single('file'), async (req, res) => 
     }
 
     res.json({ success, errors, total: records.length });
+    if (success > 0) emitSitesUpdated();
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1109,6 +1217,7 @@ initDb().then(() => {
     console.log(`Server running on http://${HOST}:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Data dir: ${DATA_DIR}`);
+    initPush();
     startMonitoring(io);
     startAutoBackup();
   });

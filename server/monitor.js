@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 import { dbAll, dbGet, dbRun } from './db.js';
 import { sendDowntimeAlert } from './mailer.js';
 import { shouldRefreshCache, parseAlertDays } from './utils.js';
+import { sendPushNotification } from './push.js';
 
 // whois-json CJS paketidir — ESM mühitində createRequire ilə yükləyirik
 const require = createRequire(import.meta.url);
@@ -94,6 +95,13 @@ async function sendWebhookNotification(site, result) {
       }).catch(() => {});
       sentChannels.push('slack');
     }
+
+    // Brauzer push bildirişi — webhook-lardan asılı olmayaraq göndərilir
+    const pushed = await sendPushNotification(
+      `${site.name} — Offline`,
+      `Sayt əlçatan deyil: ${site.url}`
+    );
+    if (pushed > 0) sentChannels.push('push');
 
     if (sentChannels.length > 0) {
       await logNotification(site.id, sentChannels.join('+'), message);
@@ -535,6 +543,42 @@ export async function getAllSitesWithLatestCheck() {
  * Uzunmüddətli statistika lazım olduqda, silmədən əvvəl gündəlik özetləri ayrı
  * bir cədvələ (məs. `checks_daily`) yazmaq lazımdır — hazırkı sadə versiya bunu etmir.
  */
+/**
+ * Tamamlanmış günlərin (bugündən əvvəl) statistikasını `daily_stats`-a yaz.
+ *
+ * Yalnız dünəni deyil, `checks`-də olan BÜTÜN tamamlanmış günləri emal edir:
+ *   - ilk işlədilmədə mövcud tarixçə geriyə doğru dolur;
+ *   - server bir gün söndürülü qalsa, həmin gün itmir.
+ * `cleanupOldChecks`-dən ƏVVƏL çağırılmalıdır, əks halda silinən detallı
+ * qeydlərin özəti heç vaxt yazılmayacaq.
+ *
+ * Qeyd: orta cavab müddəti yalnız `online` yoxlamalar üzrə hesablanır —
+ * offline yoxlamalarda `response_time` null olur və onları 0 kimi saymaq
+ * ortalamanı süni şəkildə aşağı çəkərdi.
+ */
+async function aggregateDailyStats() {
+  try {
+    const result = await dbRun(
+      `INSERT INTO daily_stats (site_id, date, avg_response_time, uptime_percent, total_checks)
+       SELECT site_id,
+              date(checked_at) AS d,
+              AVG(CASE WHEN status = 'online' THEN response_time END),
+              100.0 * SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) / COUNT(*),
+              COUNT(*)
+       FROM checks
+       WHERE date(checked_at) < date('now')
+       GROUP BY site_id, date(checked_at)
+       ON CONFLICT(site_id, date) DO UPDATE SET
+         avg_response_time = excluded.avg_response_time,
+         uptime_percent    = excluded.uptime_percent,
+         total_checks      = excluded.total_checks`
+    );
+    console.log(`Gündəlik statistika hesablandı (${result.changes} gün/sayt qeydi)`);
+  } catch (err) {
+    console.error('Daily stats aggregation failed:', err.message);
+  }
+}
+
 async function cleanupOldChecks() {
   const RETENTION_DAYS = 90;
   try {
@@ -563,9 +607,14 @@ export function startMonitoring(io) {
   checkExpiryAlerts();
   setInterval(() => checkExpiryAlerts(), 12 * 60 * 60 * 1000);
 
-  // Köhnə check məlumatlarını gündə bir dəfə təmizlə
-  cleanupOldChecks();
-  setInterval(() => cleanupOldChecks(), 24 * 60 * 60 * 1000);
+  // Gündə bir dəfə: əvvəlcə gündəlik özəti yaz, SONRA köhnə detalları sil.
+  // Sıra vacibdir — əks halda silinən qeydlərin statistikası itər.
+  const dailyMaintenance = async () => {
+    await aggregateDailyStats();
+    await cleanupOldChecks();
+  };
+  dailyMaintenance();
+  setInterval(dailyMaintenance, 24 * 60 * 60 * 1000);
 }
 
 // Response time yavaşlama xəbərdarlığı
@@ -770,6 +819,14 @@ async function sendExpiryNotification(message, webhooks, smtp, site) {
       sentChannels.push('email');
     } catch {}
   }
+
+  // Brauzer push bildirişi
+  const pushed = await sendPushNotification(
+    site?.name ? `${site.name} — Xəbərdarlıq` : 'Monitorinq xəbərdarlığı',
+    // Markdown işarələrini push mətnindən təmizlə
+    message.replace(/\*\*/g, '').replace(/\n+/g, ' ').slice(0, 200)
+  );
+  if (pushed > 0) sentChannels.push('push');
 
   if (sentChannels.length > 0) {
     await logNotification(site?.id, sentChannels.join('+'), message);

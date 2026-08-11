@@ -184,6 +184,32 @@ export async function initDb() {
   try { await dbExec(`ALTER TABLE sites ADD COLUMN maintenance_mode INTEGER DEFAULT 0`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN check_interval_minutes INTEGER DEFAULT 30`); } catch {}
 
+  // Brauzer push bildirişi abunəlikləri
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      endpoint TEXT UNIQUE NOT NULL,
+      subscription_json TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Gündəlik aggregate statistika — köhnə detallı check-lər silinsə də
+  // uzunmüddətli trend məlumatı qalsın
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS daily_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER NOT NULL,
+      date TEXT NOT NULL,
+      avg_response_time REAL,
+      uptime_percent REAL,
+      total_checks INTEGER,
+      UNIQUE(site_id, date),
+      FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+    );
+  `);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_daily_stats_site_date ON daily_stats(site_id, date)`);
+
   // Göndərilmiş bildirişlərin tarixçəsi (in-app)
   await dbExec(`
     CREATE TABLE IF NOT EXISTS notification_log (

@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { SmtpSettings, WebhookSettings } from '../types';
 import { authHeaders, getAdminToken } from '../useAuth';
+import {
+  isPushSupported,
+  subscribeToPush,
+  unsubscribeFromPush,
+  hasActivePushSubscription,
+} from '../pushNotifications';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
 
@@ -390,6 +396,109 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   );
 }
 
+function PushNotifications() {
+  const [busy, setBusy] = useState(false);
+  const [active, setActive] = useState(false);
+  const supported = isPushSupported();
+
+  useEffect(() => {
+    hasActivePushSubscription().then(setActive);
+  }, []);
+
+  const handleEnable = async () => {
+    setBusy(true);
+    try {
+      const result = await subscribeToPush();
+      if (result.ok) {
+        setActive(true);
+        await dialog.alert('Brauzer bildirişləri aktivləşdirildi.', 'Uğurlu');
+      } else {
+        await dialog.alert(result.reason, 'Aktivləşdirilə bilmədi');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDisable = async () => {
+    setBusy(true);
+    try {
+      const result = await unsubscribeFromPush();
+      if (result.ok) {
+        setActive(false);
+        await dialog.alert('Brauzer bildirişləri söndürüldü.', 'Uğurlu');
+      } else {
+        await dialog.alert(result.reason, 'Xəta');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch(apiUrl('/api/push/test'), {
+        method: 'POST',
+        headers: { ...authHeaders() },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Test bildirişi göndərilmədi');
+      await dialog.alert(`Test bildirişi göndərildi (${data.sent} cihaz).`, 'Uğurlu');
+    } catch (err) {
+      await dialog.alert(err instanceof Error ? err.message : 'Xəta baş verdi', 'Xəta');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-4 border-t border-border">
+      <h3 className="text-white text-sm font-medium mb-1">Brauzer bildirişləri</h3>
+      <p className="text-text-muted text-xs mb-3">
+        Sayt offline olanda və ya domain/SSL bitməyə yaxınlaşanda brauzer bildirişi al.
+        Sekmə bağlı olsa da işləyir. Yalnız HTTPS və ya localhost üzərində mümkündür.
+      </p>
+
+      {!supported ? (
+        <p className="text-yellow-400 text-xs">Bu brauzer push bildirişlərini dəstəkləmir.</p>
+      ) : (
+        <div className="flex gap-2 flex-wrap items-center">
+          {active ? (
+            <>
+              <span className="px-2 py-1 text-xs rounded-full bg-green-400/10 text-green-400 border border-green-400/30">
+                Aktivdir
+              </span>
+              <button
+                onClick={handleTest}
+                disabled={busy}
+                className="px-4 py-2 border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors text-sm disabled:opacity-50"
+              >
+                Test Bildirişi
+              </button>
+              <button
+                onClick={handleDisable}
+                disabled={busy}
+                className="px-4 py-2 border border-border text-text-muted rounded-lg hover:text-white transition-colors text-sm disabled:opacity-50"
+              >
+                Söndür
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleEnable}
+              disabled={busy}
+              className="px-4 py-2 border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors text-sm disabled:opacity-50"
+            >
+              {busy ? 'Gözləyin...' : 'Brauzer Bildirişlərini Aktivləşdir'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ConfigTransfer() {
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -612,6 +721,7 @@ function BackupTab() {
         </div>
       )}
 
+      <PushNotifications />
       <ConfigTransfer />
     </div>
   );
