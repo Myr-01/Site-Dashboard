@@ -70,9 +70,11 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between text-xs text-text-muted">
-        <span>{days} Days Uptime</span>
+        <span className="text-accent font-heading font-semibold uppercase tracking-wider">
+          Uptime ({days} gün)
+        </span>
         <div className="flex items-center gap-2">
-          <span>Less</span>
+          <span>Az</span>
           <div className="flex gap-1">
             <div className="w-3 h-3 rounded-sm bg-navy-light"></div>
             <div className="w-3 h-3 rounded-sm bg-red-400/30"></div>
@@ -80,7 +82,7 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
             <div className="w-3 h-3 rounded-sm bg-green-400/30"></div>
             <div className="w-3 h-3 rounded-sm bg-green-400"></div>
           </div>
-          <span>More</span>
+          <span>Çox</span>
         </div>
       </div>
       <div className={`grid gap-1 ${days === 7 ? 'grid-cols-7' : 'grid-cols-6 sm:grid-cols-10'}`}>

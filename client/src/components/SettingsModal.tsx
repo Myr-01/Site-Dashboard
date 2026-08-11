@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SmtpSettings, WebhookSettings } from '../types';
-import { authHeaders } from '../useAuth';
+import { authHeaders, getAdminToken } from '../useAuth';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
 
@@ -390,6 +390,87 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   );
 }
 
+function ConfigTransfer() {
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleExport = () => {
+    const token = getAdminToken();
+    if (!token) {
+      dialog.alert('Sessiya bitib, yenidən giriş edin', 'Xəta');
+      return;
+    }
+    window.open(apiUrl('/api/config/export') + `?token=${encodeURIComponent(token)}`, '_blank');
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('Fayl düzgün JSON deyil');
+      }
+
+      const res = await fetch(apiUrl('/api/config/import'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Import uğursuz oldu');
+
+      const parts = [`${result.imported} sayt import edildi`];
+      if (result.skipped > 0) {
+        parts.push(`${result.skipped} sayt atlandı (dublikat və ya yanlış format)`);
+      }
+      await dialog.alert(parts.join('. ') + '.', 'Uğurlu');
+      window.location.reload();
+    } catch (err) {
+      await dialog.alert(err instanceof Error ? err.message : 'Xəta baş verdi', 'Xəta');
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="mt-6 pt-4 border-t border-border">
+      <h3 className="text-white text-sm font-medium mb-1">Konfiqurasiya</h3>
+      <p className="text-text-muted text-xs mb-3">
+        Saytların siyahısını və parametrlərini JSON kimi köçür. Giriş məlumatları (istifadəçi adı,
+        şifrə, panel URL-ləri) fayla daxil edilmir.
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={handleExport}
+          className="px-4 py-2 border border-accent text-accent rounded-lg hover:bg-accent/10 transition-colors text-sm"
+        >
+          Export Et
+        </button>
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={importing}
+          className="px-4 py-2 border border-border text-text-muted rounded-lg hover:text-white transition-colors text-sm disabled:opacity-50"
+        >
+          {importing ? 'Import olunur...' : 'Import Et'}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          onChange={handleImport}
+          className="hidden"
+        />
+      </div>
+    </div>
+  );
+}
+
 function BackupTab() {
   const [backups, setBackups] = useState<BackupItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -530,6 +611,8 @@ function BackupTab() {
           ))}
         </div>
       )}
+
+      <ConfigTransfer />
     </div>
   );
 }

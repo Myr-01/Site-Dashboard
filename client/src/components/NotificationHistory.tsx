@@ -52,7 +52,7 @@ export default function NotificationHistory({ siteId }: NotificationHistoryProps
   }
 
   return (
-    <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin">
+    <div className="space-y-2">
       {logs.map(log => (
         <div key={log.id} className="bg-navy-light rounded-lg p-3 border border-border">
           <div className="flex justify-between items-center gap-2 text-xs text-text-muted mb-1">

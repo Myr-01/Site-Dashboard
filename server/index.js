@@ -89,6 +89,13 @@ app.use(helmet({
 }));
 app.use(express.json());
 
+// Public status page — React-dən tamamilə ayrı statik HTML.
+// Statik client servisindən ƏVVƏL elan olunur ki, sonda gələn catch-all
+// route-a düşməsin. Auth tələb etmir.
+app.get('/status', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'status.html'));
+});
+
 // Serve static files (production build)
 const clientDistPath = path.join(__dirname, '../client/dist');
 if (fs.existsSync(clientDistPath)) {
@@ -252,6 +259,163 @@ app.get('/api/notifications', async (req, res) => {
 
     const logs = await dbAll(query, params);
     res.json(logs);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Son 30 günün uptime faizini hesabla (null = kifayət qədər məlumat yoxdur)
+async function uptime30d(siteId) {
+  const row = await dbGet(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN status = 'online' THEN 1 ELSE 0 END) AS online
+     FROM checks
+     WHERE site_id = ? AND checked_at > datetime('now', '-30 days')`,
+    [siteId]
+  );
+  if (!row || !row.total) return null;
+  return ((row.online / row.total) * 100).toFixed(2);
+}
+
+// === PUBLIC STATUS PAGE ===
+
+// Auth tələb etmir. Minimal ifşa prinsipi: yalnız ad + status + uptime.
+// `url` QƏSDƏN göndərilmir — daxili URL strukturunu public səhifədə açmağa ehtiyac yoxdur.
+app.get('/api/public/status', async (req, res) => {
+  try {
+    const sites = await dbAll('SELECT id, name, maintenance_mode FROM sites ORDER BY name');
+    const result = [];
+
+    for (const site of sites) {
+      const latestCheck = await dbGet(
+        'SELECT status, ssl_valid, checked_at FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT 1',
+        [site.id]
+      );
+      result.push({
+        name: site.name,
+        status: site.maintenance_mode ? 'maintenance' : (latestCheck?.status || 'unknown'),
+        ssl_valid: latestCheck?.ssl_valid ?? null,
+        uptime_30d: await uptime30d(site.id),
+        last_checked: latestCheck?.checked_at || null,
+      });
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === EXPORT ===
+
+// CSV export — fayl endirmə olduğuna görə token header-də və ya ?token= query-də
+app.get('/api/export/csv', requireAuthFlexible, async (req, res) => {
+  try {
+    const sites = await dbAll('SELECT * FROM sites ORDER BY name');
+    const rows = [['Ad', 'URL', 'Status', 'Uptime (30g)', 'SSL', 'Domain Bitmə', 'Hosting', 'Qrup', 'İnterval (dəq)']];
+
+    for (const site of sites) {
+      const latestCheck = await dbGet(
+        'SELECT status, ssl_valid, domain_expiry, hosting_provider FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT 1',
+        [site.id]
+      );
+      const uptimePercent = (await uptime30d(site.id)) ?? 'N/A';
+
+      rows.push([
+        site.name,
+        site.url,
+        site.maintenance_mode ? 'baxımda' : (latestCheck?.status || 'N/A'),
+        uptimePercent,
+        latestCheck?.ssl_valid == null ? 'N/A' : (latestCheck.ssl_valid ? 'Keçərli' : 'Keçərsiz'),
+        site.manual_domain_expiry || latestCheck?.domain_expiry || 'N/A',
+        latestCheck?.hosting_provider || 'N/A',
+        site.group_name || '',
+        site.check_interval_minutes ?? 30,
+      ]);
+    }
+
+    const csv = rows
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\r\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="sites-export.csv"');
+    // UTF-8 BOM — Excel-də Azərbaycan hərflərinin (ə, ı, ş, ğ) korlanmaması üçün
+    res.send('\uFEFF' + csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Konfiqurasiya export — fayl endirmə, ona görə flexible auth
+app.get('/api/config/export', requireAuthFlexible, async (req, res) => {
+  try {
+    // DİQQƏT: giriş məlumatları (domain_username/password, hosting_username/password,
+    // login URL-ləri) BİLƏRƏKDƏN daxil edilmir — bu fayl disk/email vasitəsilə paylaşıla bilər.
+    const sites = await dbAll(`
+      SELECT name, url, group_name, notes, color_tag, alert_days, check_interval_minutes,
+             manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry
+      FROM sites
+      ORDER BY name
+    `);
+
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="sites-config.json"');
+    res.json({ exported_at: new Date().toISOString(), version: 1, sites });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Konfiqurasiya import
+app.post('/api/config/import', requireAuth, async (req, res) => {
+  try {
+    const { sites } = req.body;
+    if (!Array.isArray(sites)) {
+      return res.status(400).json({ error: 'Yanlış format — "sites" array olmalıdır' });
+    }
+    if (sites.length > 500) {
+      return res.status(400).json({ error: 'Bir dəfədə maksimum 500 sayt import edilə bilər' });
+    }
+
+    // Mövcud URL-ləri əvvəlcədən oxu — dublikat yaratmayaq
+    const existing = await dbAll('SELECT url FROM sites');
+    const existingUrls = new Set(existing.map(s => String(s.url).trim().toLowerCase()));
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const site of sites) {
+      const name = typeof site?.name === 'string' ? site.name.trim() : '';
+      const url = typeof site?.url === 'string' ? site.url.trim() : '';
+
+      if (!name || !url) { skipped++; continue; }
+      if (!/^https?:\/\//i.test(url)) { skipped++; continue; }
+      if (existingUrls.has(url.toLowerCase())) { skipped++; continue; }
+
+      const interval = Number(site.check_interval_minutes);
+      await dbRun(
+        `INSERT INTO sites (name, url, group_name, notes, color_tag, alert_days, check_interval_minutes,
+         manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          name,
+          url,
+          site.group_name || null,
+          site.notes || null,
+          site.color_tag || null,
+          normalizeAlertDays(site.alert_days),
+          Number.isInteger(interval) && interval >= 1 && interval <= 1440 ? interval : 30,
+          site.manual_domain_expiry || null,
+          site.manual_domain_registrar || null,
+          site.manual_hosting_expiry || null,
+        ]
+      );
+      existingUrls.add(url.toLowerCase());
+      imported++;
+    }
+
+    res.json({ success: true, imported, skipped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -124,6 +124,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const [intervalSaving, setIntervalSaving] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteText, setNoteText] = useState('');
+  // İstifadəçi "Qeydlər" formasında nəsə dəyişibsə, server yeniləməsi onu üzərinə yazmasın
+  const formDirty = useRef(false);
   const [notesSaving, setNotesSaving] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [credentials, setCredentials] = useState<{
@@ -139,17 +141,32 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const seoScore = getSeoScore(check);
   const E = siteInfo?.extra_info;
 
+  // Forma sahələrini server datası ilə uyğunlaşdır.
+  // İstifadəçi formada nəsə dəyişibsə (formDirty) yazdığını üzərinə yazmırıq.
+  const syncFormFromSite = (s: Site) => {
+    if (formDirty.current) return;
+    setNotesValue(s.notes || '');
+    setGroupValue(s.group_name || '');
+    setColorTagValue(s.color_tag || '');
+    setAlertDaysValue(s.alert_days || '3,1');
+  };
+
   // Saxlandıqdan sonra site datasını yenilə (reload yox)
   const refreshSite = async () => {
     try {
       const res = await fetch(apiUrl('/api/sites'));
       const all: Site[] = await res.json();
       const updated = all.find(s => s.id === site.id);
-      if (updated) setSite(updated);
+      if (updated) {
+        setSite(updated);
+        syncFormFromSite(updated);
+      }
     } catch {}
   };
 
   useEffect(() => {
+    // Modal açılanda serverdən təzə data götür — App-dən gələn obyekt köhnə ola bilər
+    refreshSite();
     fetchBackups();
     fetchSiteInfo();
     fetchCredentials();
@@ -285,30 +302,41 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const saveNotes = async () => {
     setNotesSaving(true);
     try {
-      if (!getAdminToken()) {
-        const entered = await dialog.password();
-        if (!entered) { setNotesSaving(false); return; }
-        const ok = await loginWithPassword(entered as string);
-        if (!ok) {
-          await dialog.alert('Şifrə yanlışdır', 'Xəta');
-          setNotesSaving(false);
-          return;
-        }
-      }
-      await fetch(apiUrl(`/api/sites/${site.id}/meta`), {
+      const body = JSON.stringify({
+        notes: notesValue,
+        group_name: groupValue,
+        color_tag: colorTagValue,
+        alert_days: alertDaysValue,
+      });
+
+      const send = () => fetch(apiUrl(`/api/sites/${site.id}/meta`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
-        body: JSON.stringify({
-          notes: notesValue,
-          group_name: groupValue,
-          color_tag: colorTagValue,
-          alert_days: alertDaysValue,
-        }),
+        body,
       });
+
+      if (!(await ensureAuth())) { setNotesSaving(false); return; }
+
+      let res = await send();
+
+      // Token mövcud ola bilər, amma vaxtı bitmiş / etibarsız olsun (məs. JWT_SECRET dəyişib).
+      // Bu halda bir dəfə yenidən giriş təklif edib təkrar cəhd edirik.
+      if (res.status === 401) {
+        clearAdminToken();
+        if (!(await ensureAuth())) { setNotesSaving(false); return; }
+        res = await send();
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Saxlanıla bilmədi (${res.status})`);
+      }
+
+      formDirty.current = false;
       await refreshSite();
       await dialog.alert('Qeydlər saxlanıldı', 'Uğurlu');
-    } catch {
-      await dialog.alert('Xəta baş verdi', 'Xəta');
+    } catch (err) {
+      await dialog.alert(err instanceof Error ? err.message : 'Xəta baş verdi', 'Xəta');
     } finally {
       setNotesSaving(false);
     }
@@ -383,13 +411,14 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       onClick={handleClose}
     >
       <div
-        className={`bg-navy-surface border border-border rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col transition-[transform,opacity] duration-200 ${
+        // h-[85vh] (max-h yox) — modalın hündürlüyü tabdan taba dəyişməsin
+        className={`bg-navy-surface border border-border rounded-2xl w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden transition-[transform,opacity] duration-200 ${
           isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'
         }`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-navy-surface border-b border-border p-5 rounded-t-2xl">
+        <div className="bg-navy-surface border-b border-border px-5 pt-5 rounded-t-2xl flex-shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
@@ -425,13 +454,13 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
             </button>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 mt-4 -mb-px overflow-x-auto scrollbar-hide">
+          {/* Tabs — flex-wrap: heç bir tab kəsilmir, sığmayanlar aşağı sətrə keçir */}
+          <div className="flex flex-wrap gap-x-1 gap-y-0 mt-4">
             {tabs.map(tab => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`px-3 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors border-b-2 ${
+                className={`px-2.5 py-2 text-sm font-medium whitespace-nowrap rounded-t-lg transition-colors border-b-2 ${
                   activeTab === tab.key
                     ? 'border-accent text-accent'
                     : 'border-transparent text-text-muted hover:text-white'
@@ -443,8 +472,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
           </div>
         </div>
 
-        {/* Body (scrollable) */}
-        <div className="p-5 overflow-y-auto scrollbar-thin flex-1">
+        {/* Body (scrollable) — min-h-0 flex konteynerində overflow-un düzgün işləməsi üçün */}
+        <div className="p-5 overflow-y-auto scrollbar-thin flex-1 min-h-0">
           {!check ? (
             <p className="text-text-muted text-sm text-center py-8">İlk yoxlama gözlənilir...</p>
           ) : (
@@ -472,7 +501,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   </div>
 
                   <div>
-                    <h4 className="text-accent text-xs font-heading font-semibold uppercase tracking-wider mb-3">Response Time (24h)</h4>
+                    <h4 className="text-accent text-xs font-heading font-semibold uppercase tracking-wider mb-3">Cavab müddəti (24 saat)</h4>
                     <div className="bg-navy-light rounded-lg p-4">
                       <ResponseTimeChart siteId={site.id} />
                     </div>
@@ -818,7 +847,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                         <p className="text-text-muted text-xs mt-1">Sayt bu zamana qədər offline olmayıb</p>
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+                      <div className="space-y-2">
                         {incidents.map(inc => {
                           const start = new Date(inc.started_at + 'Z');
                           const durSec = inc.duration_seconds;
@@ -923,7 +952,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                     <input
                       type="text"
                       value={groupValue}
-                      onChange={e => setGroupValue(e.target.value)}
+                      onChange={e => { formDirty.current = true; setGroupValue(e.target.value); }}
                       placeholder="Məs: Müştəri saytları, Şəxsi, E-ticarət..."
                       className="w-full px-3 py-2.5 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
                     />
@@ -938,7 +967,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                           <button
                             key={tag.value || 'none'}
                             type="button"
-                            onClick={() => setColorTagValue(tag.value)}
+                            onClick={() => { formDirty.current = true; setColorTagValue(tag.value); }}
                             title={tag.label}
                             aria-label={tag.label}
                             aria-pressed={isSelected}
@@ -958,7 +987,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                     <input
                       type="text"
                       value={alertDaysValue}
-                      onChange={e => setAlertDaysValue(e.target.value)}
+                      onChange={e => { formDirty.current = true; setAlertDaysValue(e.target.value); }}
                       placeholder="30,7,1"
                       className="w-full px-3 py-2.5 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
                     />
@@ -970,7 +999,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                     <label className="block text-text-muted text-xs mb-2 uppercase tracking-wider">Qeydlər</label>
                     <textarea
                       value={notesValue}
-                      onChange={e => setNotesValue(e.target.value)}
+                      onChange={e => { formDirty.current = true; setNotesValue(e.target.value); }}
                       rows={8}
                       placeholder="Müştəri əlaqəsi, FTP məlumatları, xüsusi qeydlər..."
                       className="w-full px-3 py-2.5 bg-navy-light border border-border rounded-lg text-white text-sm placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors resize-none scrollbar-thin"
@@ -1011,7 +1040,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   {backups.length === 0 ? (
                     <p className="text-text-muted text-xs text-center py-6">Bu sayt üçün hələ backup yoxdur</p>
                   ) : (
-                    <div className="space-y-2 max-h-80 overflow-y-auto scrollbar-thin">
+                    <div className="space-y-2">
                       {backups.map(backup => (
                         <div key={backup.name} className="flex items-center justify-between p-2.5 bg-navy-light rounded-lg">
                           <div className="flex-1 min-w-0">
@@ -1033,7 +1062,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-border">
+        <div className="flex items-center justify-between p-4 border-t border-border flex-shrink-0">
           <button
             onClick={async () => {
               const ok = await dialog.confirm('Bu saytı monitoring siyahısından silmək istəyirsiniz?', 'Saytı Sil', true);

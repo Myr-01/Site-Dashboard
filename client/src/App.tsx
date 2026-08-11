@@ -8,7 +8,7 @@ import FloatingToolbar from './components/FloatingToolbar';
 import WorldMap from './components/WorldMap';
 import AuthModal from './components/AuthModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useAuth, authHeaders } from './useAuth';
+import { useAuth, authHeaders, getAdminToken } from './useAuth';
 import { apiUrl } from './api';
 import { dialog } from './components/Dialog';
 
@@ -98,6 +98,16 @@ function App() {
     fetchSites();
   }, [fetchSites]);
 
+  // `selectedSite` klik anında snapshot kimi saxlanılır — `sites` yeniləndikdə
+  // (socket və ya fetch) onu da təzələ, əks halda modal köhnə dəyərləri göstərir
+  useEffect(() => {
+    setSelectedSite(prev => {
+      if (!prev) return prev;
+      const fresh = sites.find(s => s.id === prev.id);
+      return fresh ?? prev;
+    });
+  }, [sites]);
+
   const handleDelete = async (id: number): Promise<boolean> => {
     try {
       const res = await fetch(apiUrl(`/api/sites/${id}`), {
@@ -152,6 +162,13 @@ function App() {
     }
   };
 
+  // CSV export — window.open header göndərə bilmir, token query parametrindədir
+  const handleCsvExport = () => {
+    const token = getAdminToken();
+    if (!token) return;
+    window.open(apiUrl('/api/export/csv') + `?token=${encodeURIComponent(token)}`, '_blank');
+  };
+
   // Klaviatura qısayolları
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -199,6 +216,14 @@ function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* CSV Export */}
+          <button
+            onClick={() => withAuth(handleCsvExport)}
+            className="px-3 py-1.5 text-xs rounded-lg font-medium border border-border bg-navy-surface text-text-muted hover:text-white transition-colors"
+          >
+            CSV Export
+          </button>
+
           {/* Seçim rejimi */}
           <button
             onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xidmət Statusu</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #14213d;
+      --border: rgba(229, 229, 229, 0.1);
+      --muted: #9aa3b8;
+      --accent: #fca311;
+    }
+    * { box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: #ffffff;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .container { max-width: 700px; margin: 0 auto; }
+    h1 {
+      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-size: 28px;
+      margin: 0 0 8px;
+    }
+    h1 .dot { color: var(--accent); }
+    .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+    .overall {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+    }
+    .overall .indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+    .site-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .site-name { font-weight: 600; }
+    .status-badge {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .status-online { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    .status-offline { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .status-maintenance { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .status-unknown { background: rgba(154, 163, 184, 0.1); color: var(--muted); }
+    .uptime { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .loading { color: var(--muted); text-align: center; padding: 40px 0; }
+    footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 28px; }
+    @media (max-width: 480px) {
+      body { padding: 24px 14px; }
+      h1 { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1><span class="dot">&#9679;</span> Xidmət Statusu</h1>
+    <p class="subtitle">Canlı monitorinq — avtomatik hər 60 saniyədə yenilənir</p>
+
+    <div id="overall" hidden></div>
+    <div id="sites-list" aria-live="polite"><p class="loading">Yüklənir...</p></div>
+
+    <footer id="updated"></footer>
+  </div>
+
+  <script>
+    var STATUS_LABELS = {
+      online: 'İşləyir',
+      offline: 'Əlçatan deyil',
+      maintenance: 'Baxımda',
+      unknown: 'Naməlum'
+    };
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str == null ? '' : String(str);
+      return div.innerHTML;
+    }
+
+    function renderOverall(sites) {
+      var el = document.getElementById('overall');
+      var active = sites.filter(function (s) { return s.status !== 'maintenance'; });
+      var down = active.filter(function (s) { return s.status === 'offline'; }).length;
+      var unknown = active.filter(function (s) { return s.status === 'unknown'; }).length;
+
+      var color, text;
+      if (down > 0) {
+        color = '#ef4444';
+        text = down + ' xidmətdə problem var';
+      } else if (unknown > 0) {
+        color = '#9aa3b8';
+        text = 'Bəzi xidmətlərin statusu naməlumdur';
+      } else if (active.length === 0) {
+        color = '#3b82f6';
+        text = 'Bütün xidmətlər baxımdadır';
+      } else {
+        color = '#22c55e';
+        text = 'Bütün sistemlər işləyir';
+      }
+
+      el.className = 'overall';
+      el.innerHTML = '<span class="indicator" style="background:' + color + '"></span>' +
+                     '<span>' + escapeHtml(text) + '</span>';
+      el.hidden = false;
+    }
+
+    function render(sites) {
+      var container = document.getElementById('sites-list');
+
+      if (!sites.length) {
+        container.innerHTML = '<p class="loading">Hələ izlənən xidmət yoxdur.</p>';
+        document.getElementById('overall').hidden = true;
+        return;
+      }
+
+      renderOverall(sites);
+
+      container.innerHTML = sites.map(function (site) {
+        var status = STATUS_LABELS[site.status] ? site.status : 'unknown';
+        var uptime = site.uptime_30d !== null && site.uptime_30d !== undefined
+          ? '<div class="uptime">30 günlük uptime: ' + escapeHtml(site.uptime_30d) + '%</div>'
+          : '';
+        return '<div class="site-row">' +
+                 '<div>' +
+                   '<div class="site-name">' + escapeHtml(site.name) + '</div>' +
+                   uptime +
+                 '</div>' +
+                 '<span class="status-badge status-' + status + '">' +
+                   escapeHtml(STATUS_LABELS[status]) +
+                 '</span>' +
+               '</div>';
+      }).join('');
+
+      document.getElementById('updated').textContent =
+        'Son yenilənmə: ' + new Date().toLocaleString('az-AZ');
+    }
+
+    function loadStatus() {
+      fetch('/api/public/status')
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
+        .then(function (sites) {
+          render(Array.isArray(sites) ? sites : []);
+        })
+        .catch(function () {
+          document.getElementById('sites-list').innerHTML =
+            '<p class="loading">Məlumat yüklənə bilmədi.</p>';
+          document.getElementById('overall').hidden = true;
+        });
+    }
+
+    loadStatus();
+    setInterval(loadStatus, 60000);
+  </script>
+</body>
+</html>
