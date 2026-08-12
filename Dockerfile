@@ -27,7 +27,14 @@ FROM node:20-slim AS client-build
 WORKDIR /app/client
 
 COPY client/package.json client/package-lock.json ./
-RUN npm ci
+
+# QEYD: burada `npm ci` yerinə `npm install` istifadə olunur.
+# Səbəb: client/package-lock.json `package.json` ilə tam sinxron deyil —
+# `vitest@4` daxilən `vite@6+` (və `esbuild@0.28`) tələb edir, lock-da isə
+# yalnız `vite@5` / `esbuild@0.21` alt-ağacı var. `npm ci` bunu rədd edir.
+# Tətbiqin özü `vite@^5.3.1` ilə build olunur, ona görə nəticə dəyişmir.
+# Lock düzəldiləndən sonra bunu yenidən `npm ci` etmək lazımdır (determinizm üçün).
+RUN npm install --no-audit --no-fund
 
 COPY client/ ./
 RUN npm run build
