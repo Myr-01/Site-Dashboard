@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { DATA_DIR, dbPath } from './db.js';
 import { isSafeFilename } from './utils.js';
+import { isOffsiteBackupEnabled, uploadBackupToR2, cleanOldOffsiteBackups } from './offsiteBackup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = dbPath;
@@ -15,7 +16,7 @@ if (!fs.existsSync(BACKUP_DIR)) {
 }
 
 // Backup yarat
-export function createBackup() {
+export async function createBackup() {
   try {
     if (!fs.existsSync(DB_PATH)) {
       console.error('Backup error: monitor.db tapılmadı');
@@ -35,6 +36,15 @@ export function createBackup() {
 
     const stats = fs.statSync(backupPath);
     console.log(`Backup yaradıldı: ${backupName} (${formatSize(stats.size)})`);
+
+    // Xarici (R2) nüsxə — konfiqurasiya yoxdursa səssizcə keçilir.
+    // Yükləmə uğursuz olsa belə lokal backup artıq mövcuddur, ona görə
+    // bu, funksiyanın qalanını pozmamalıdır.
+    if (isOffsiteBackupEnabled()) {
+      await uploadBackupToR2(backupPath, backupName);
+      const keepNames = listBackups().map(b => b.name);
+      await cleanOldOffsiteBackups(keepNames);
+    }
 
     return {
       name: backupName,
@@ -161,6 +171,9 @@ export function startAutoBackup() {
   }, 24 * 60 * 60 * 1000); // 24 saat
 
   console.log('Avtomatik backup aktivdir (hər 24 saatda)');
+  if (isOffsiteBackupEnabled()) {
+    console.log('Xarici (R2) backup köçürməsi aktivdir');
+  }
 }
 
 // Backup qovluğunun path-ini export et (download üçün)

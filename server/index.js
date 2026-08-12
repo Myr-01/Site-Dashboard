@@ -21,6 +21,7 @@ import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup
 import { analyzeBackup } from './backup-analyzer.js';
 import { generateSiteReportPDF } from './pdfReport.js';
 import { initPush, isPushEnabled, sendPushNotification } from './push.js';
+import { initOffsiteBackup } from './offsiteBackup.js';
 import { DATA_DIR } from './db.js';
 
 // Admin şifrəsi artıq plain text saxlanılmır — yalnız bcrypt hash-i.
@@ -969,9 +970,11 @@ app.get('/api/backups', (req, res) => {
 });
 
 // Manual backup yarat
-app.post('/api/backups', requireAuth, (req, res) => {
+// createBackup artıq async-dır (R2-ə köçürmə üçün) — await olunmalıdır,
+// əks halda cavabda Promise serializə olunub boş obyekt kimi gedər.
+app.post('/api/backups', requireAuth, async (req, res) => {
   try {
-    const result = createBackup();
+    const result = await createBackup();
     if (result) {
       res.json({ success: true, backup: result });
     } else {
@@ -1263,6 +1266,7 @@ initDb().then(() => {
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Data dir: ${DATA_DIR}`);
     initPush();
+    initOffsiteBackup();
     startMonitoring(io);
     startAutoBackup();
   });
