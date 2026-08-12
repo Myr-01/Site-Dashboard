@@ -20,6 +20,7 @@ server/backups/
 server/site-backups/
 server/uploads/
 server/temp/
+server/tmp/
 
 # Backup file formats
 *.wpress

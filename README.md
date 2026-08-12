@@ -163,25 +163,117 @@ Endpoint-lerin tam siyahisi ve auth teleblerine baxmaq ucun: [API.md](API.md)
 
 ## Deploy
 
-### Backend - Railway
+### Backend - Fly.io (tovsiye olunan)
+
+Layihede `Dockerfile` ve `fly.toml` hazirdir. Docker lokal olaraq lazim deyil — Fly uzaqdan build edir.
+
+**1. flyctl qurashdir ve daxil ol**
+
+```powershell
+iwr https://fly.io/install.ps1 -useb | iex
+fly auth login
+```
+
+**2. Tetbiq yarat**
+
+Ad qlobal unikal olmalidir, `fly.toml`-da `app` deyerini oz adinla deyish:
+
+```powershell
+fly apps create site-monitor-myr
+```
+
+**3. Persistent volume yarat (VACIB)**
+
+Bunsuz her deploy-da butun melumat (SQLite bazasi, backup-lar) itir. Region `fly.toml`-daki `primary_region` ile eyni olmalidir:
+
+```powershell
+fly volumes create monitor_data --region fra --size 3
+```
+
+**4. Sirleri teyin et**
+
+```powershell
+fly secrets set `
+  ADMIN_PASSWORD_HASH="<hash>" `
+  JWT_SECRET="<secret>" `
+  VAPID_PUBLIC_KEY="<public>" `
+  VAPID_PRIVATE_KEY="<private>" `
+  VAPID_SUBJECT="mailto:sizin@email.com" `
+  FRONTEND_URL="https://your-app.vercel.app"
+```
+
+`NODE_ENV`, `PORT` ve `DATA_DIR` `fly.toml`-un `[env]` bolmesindedir — onlari secret kimi vermek lazim deyil.
+
+**5. Deploy**
+
+```powershell
+fly deploy --remote-only
+fly scale count 1
+fly logs
+```
+
+**6. Yoxla**
+
+```
+https://<app-adi>.fly.dev/api/health
+https://<app-adi>.fly.dev/status
+```
+
+#### Fly.io ucun kritik qeydler
+
+| Mesele | Sebeb |
+|--------|-------|
+| **Yalniz 1 mashin** (`fly scale count 1`) | Melumat SQLite-dedir ve volume tek mashina baglidir. Ikinci mashin oz ayri bazasini alar. Elave olaraq monitoring dovru proses yaddashindadir — 2 mashin her sayti 2 defe yoxlayar ve bildirishler dublikat geler |
+| **`auto_stop_machines = 'off'`** | Fly default olaraq trafik olmayanda mashini dayandirir. Monitoring tetbiqi ucun bu yolverilmezdir — panele bakan olmasa da yoxlamalar, bildirishler, gundelik backup ve cleanup ishlemelidir |
+| **Volume mount olunmalidir** | `DATA_DIR=/data` teyin edilib, amma volume mount olunmasa server `/data`-ni konteyner diskinde yaradar ve melumat sessizce itir. `fly logs`-da `Data dir: /data` setrini yoxla |
+| **Backup-lar volume-dadir** | 3GB volume ~ orta hacimde saytlar ucun kifayetdir. WordPress `.wpress` backup-lari yuklyirsense `fly volumes extend` ile boyut |
+
+#### Melumatlarin kocurulmesi
+
+Iki variant:
+
+**a) Konfiqurasiya (saytlar + parametrler, tarixce olmadan)** — en sade yol:
+Parametrler → Backup tab → "Export Et" ile JSON endir, Fly-daki panelde "Import Et".
+
+**b) Tam baza (tarixce, hadiseler, statistika da daxil)**:
+
+```powershell
+fly ssh sftp shell
+put server/monitor.db /data/monitor.db
+exit
+fly apps restart <app-adi>
+```
+
+---
+
+### Backend - Railway (alternativ)
 
 | Deyishen | Deyer |
 |----------|-------|
 | DATA_DIR | /data |
 | ADMIN_PASSWORD_HASH | $2b$10$... (bcrypt hash) |
 | JWT_SECRET | uzun tesadufi string |
+| VAPID_PUBLIC_KEY | push ucun (opsional) |
+| VAPID_PRIVATE_KEY | push ucun (opsional) |
+| VAPID_SUBJECT | mailto:sizin@email.com |
 | FRONTEND_URL | https://your-app.vercel.app |
 | NODE_ENV | production |
 
-### Frontend - Vercel
+### Frontend
+
+`Dockerfile` client-i de build edir, yeni Fly.io hem API-ni, hem paneli eyni origin-den servis edir — ayri frontend deploy-a ehtiyac yoxdur ve CORS problemi olmur.
+
+Frontend-i ayrica Vercel-de saxlamaq istesen:
 
 | Deyishen | Deyer |
 |----------|-------|
-| VITE_API_URL | https://your-backend.up.railway.app |
+| VITE_API_URL | https://your-app.fly.dev |
 
 - Root Directory: `client`
 - Build: `npm run build`
 - Output: `dist`
+
+Bu halda Fly terefde `FRONTEND_URL` secret-ini Vercel URL-ine beraber teyin et (CORS ucun).
 
 ---
 

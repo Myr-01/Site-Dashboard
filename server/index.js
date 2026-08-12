@@ -69,11 +69,35 @@ const io = new Server(httpServer, {
   },
 });
 
-const upload = multer({ dest: 'uploads/', limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
+// Müvəqqəti upload qovluqları DATA_DIR altındadır (nisbi yol deyil).
+// Səbəb: hədəf qovluq da DATA_DIR-dədir və `fs.renameSync` yalnız EYNİ faylsistem
+// daxilində işləyir. Fly.io/Docker kimi mühitlərdə konteyner diski ilə mount olunmuş
+// volume ayrı faylsistemlərdir — nisbi yol saxlanılsa rename `EXDEV` xətası verər.
+const TMP_UPLOAD_DIR = path.join(DATA_DIR, 'tmp', 'uploads');
+const TMP_SITE_BACKUP_DIR = path.join(DATA_DIR, 'tmp', 'site-backups');
+for (const dir of [TMP_UPLOAD_DIR, TMP_SITE_BACKUP_DIR]) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+const upload = multer({ dest: TMP_UPLOAD_DIR, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 const siteBackupUpload = multer({
-  dest: 'site-backups/temp/',
+  dest: TMP_SITE_BACKUP_DIR,
   limits: { fileSize: 500 * 1024 * 1024 }, // Max 500MB
 });
+
+/**
+ * Faylı köçür. Fərqli faylsistemlər arasında `rename` EXDEV verir —
+ * o halda kopyala + sil ilə davam et.
+ */
+function moveFileSync(from, to) {
+  try {
+    fs.renameSync(from, to);
+  } catch (err) {
+    if (err.code !== 'EXDEV') throw err;
+    fs.copyFileSync(from, to);
+    fs.unlinkSync(from);
+  }
+}
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -89,6 +113,22 @@ app.use(helmet({
   contentSecurityPolicy: false, // React app üçün CSP ayrıca konfiqurasiya tələb edir
 }));
 app.use(express.json());
+
+// Health check — Fly.io/Railway kimi platformalar bunu yoxlayıb konteyneri
+// yenidən başlatmağa qərar verir. Auth tələb etmir və yüngül olmalıdır:
+// `/api/sites` bütün saytlar üzrə N+1 sorğu edir, health üçün uyğun deyil.
+app.get('/api/health', async (req, res) => {
+  try {
+    await dbGet('SELECT 1 AS ok');
+    res.json({
+      status: 'ok',
+      uptime_seconds: Math.round(process.uptime()),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(503).json({ status: 'error', error: err.message });
+  }
+});
 
 // Public status page — React-dən tamamilə ayrı statik HTML.
 // Statik client servisindən ƏVVƏL elan olunur ki, sonda gələn catch-all
@@ -1030,7 +1070,7 @@ app.post('/api/sites/:id/backups', requireAuth, siteBackupUpload.single('file'),
     const fileName = `${site.name.replace(/[^a-zA-Z0-9-_]/g, '_')}_${timestamp}${ext}`;
     const destPath = path.join(siteDir, fileName);
 
-    fs.renameSync(req.file.path, destPath);
+    moveFileSync(req.file.path, destPath);
 
     // ZIP/WPRESS faylı analiz et
     let analysis = null;
@@ -1205,6 +1245,11 @@ app.get('*', (req, res) => {
     } else {
       res.status(404).send('Client not built. Run: cd client && npm run build');
     }
+  } else {
+    // Tanınmayan /api və /socket.io yolları üçün mütləq cavab qaytar.
+    // Əks halda sorğu heç vaxt bağlanmır və klient timeout-a qədər gözləyir
+    // (health check-lər və fetch-lər "asılı qalır").
+    res.status(404).json({ error: 'Endpoint tapılmadı', path: req.path });
   }
 });
 

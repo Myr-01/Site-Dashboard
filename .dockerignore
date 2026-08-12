@@ -1,0 +1,44 @@
+# Host-da qurulmuş node_modules-u ƏSLA image-a köçürməyin:
+# bcrypt və sqlite3 native modullardır, Windows binarları Linux konteynerdə işləmir.
+**/node_modules
+
+# Client build image daxilində yenidən qurulur
+client/dist
+*.tsbuildinfo
+
+# Sirlər — image-a düşməməlidir (Fly-da `fly secrets` istifadə olunur)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Real data və backup-lar (volume-da yaşayır)
+server/monitor.db
+server/monitor.db-shm
+server/monitor.db-wal
+server/backups
+server/site-backups
+server/uploads
+server/temp
+*.wpress
+*.db
+*.sqlite
+*.sqlite3
+
+# Repo/redaktor xidməti fayllar
+.git
+.gitignore
+.github
+.kiro
+.vscode
+.idea
+.vercel
+.railway
+
+# Bu repo-ya aid olmayan alt-layihələr
+wordpress-theme
+rpg-game
+
+# Sənədlər və lokal skriptlər build üçün lazım deyil
+*.md
+*.log
+*.bat
