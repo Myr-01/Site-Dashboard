@@ -124,6 +124,14 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const [intervalSaving, setIntervalSaving] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+
+  // Block body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
   const [noteText, setNoteText] = useState('');
   // İstifadəçi "Qeydlər" formasında nəsə dəyişibsə, server yeniləməsi onu üzərinə yazmasın
   const formDirty = useRef(false);

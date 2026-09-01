@@ -20,6 +20,14 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
+  // Block body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
   const handleClose = () => {
     setIsClosing(true);
     setTimeout(onClose, 200);

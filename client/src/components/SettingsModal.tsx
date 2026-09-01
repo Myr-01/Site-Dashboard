@@ -41,6 +41,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [testLoading, setTestLoading] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Block body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
   useEffect(() => {
     fetch(apiUrl('/api/settings/email'))
       .then(res => res.json())

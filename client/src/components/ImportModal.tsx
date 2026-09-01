@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import { authHeaders } from '../useAuth';
 import { apiUrl } from '../api';
 
@@ -12,6 +12,14 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
   const [result, setResult] = useState<{ success: number; errors: number; total: number } | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Block body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0];

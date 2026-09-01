@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { authHeaders } from '../useAuth';
 import { apiUrl } from '../api';
 import { COLOR_TAGS } from '../colorTags';
@@ -15,6 +15,14 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
   const [alertDays, setAlertDays] = useState('3,1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Block body scroll when modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
