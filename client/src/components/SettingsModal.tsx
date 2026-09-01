@@ -144,8 +144,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div 
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto scrollbar-thin"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h2 className="text-xl font-heading font-bold text-white mb-6">Parametrlər</h2>
         
         {/* Tabs */}
@@ -182,7 +188,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        {activeTab === 'email' ? (
+        {/* Tab Content */}
+        {activeTab === 'email' && (
           <>
             <p className="text-text-muted text-sm mb-4">
               SMTP konfiqurasiyası ilə sayt offline olanda email bildiriş alın.
@@ -265,7 +272,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               </div>
             </form>
           </>
-        ) : (
+        )}
+
+        {activeTab === 'webhooks' && (
           <>
             <p className="text-text-muted text-sm mb-4">
               Telegram, Discord və ya Slack webhook URL daxil edin. Sayt offline olanda avtomatik bildiriş göndəriləcək.
