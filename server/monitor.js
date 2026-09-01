@@ -2,6 +2,7 @@ import axios from 'axios';
 import sslChecker from 'ssl-checker';
 import * as cheerio from 'cheerio';
 import dns from 'dns/promises';
+import https from 'https';
 import { createRequire } from 'module';
 import { dbAll, dbGet, dbRun } from './db.js';
 import { sendDowntimeAlert } from './mailer.js';
@@ -21,6 +22,15 @@ const DEFAULT_CHECK_INTERVAL_MINUTES = 30;
 // Yaddaşdadır: server restart olanda sıfırlanır və bütün saytlar dərhal bir dəfə
 // yoxlanılır. Bu zərərsiz davranışdır, funksional problem deyil.
 const lastCheckedMap = new Map();
+
+// Multi-region probe configuration
+// Production üçün: Cloudflare Workers, AWS Lambda@Edge, və ya öz distributed serverlərin
+const REGION_PROBES = [
+  { name: 'primary', endpoint: null }, // null = local check (bu server)
+  // Future: distributed probe endpoints əlavə et
+  // { name: 'us-east', endpoint: 'https://probe-us.example.com/check' },
+  // { name: 'eu-west', endpoint: 'https://probe-eu.example.com/check' },
+];
 
 // Default webhook message template
 const DEFAULT_TEMPLATE = '⚠️ **Sayt Offline Oldu**\n\n**Sayt:** {name}\n**URL:** {url}\n**Status:** {status}\n**Vaxt:** {time}';
@@ -618,18 +628,53 @@ export function startMonitoring(io) {
 }
 
 // Response time yavaşlama xəbərdarlığı
+// Enhanced anomaly detection with IQR (Interquartile Range) method
 async function checkResponseTimeAlert(site, currentResponseTime) {
   try {
-    // Son 10 yoxlamanın ortasını götür (cari xaric)
+    // Konfiqurasiya: default dəyərlər
+    const config = {
+      minSamples: 10, // Minimum neçə yoxlama lazımdır
+      multiplier: 3, // Ortalamadan neçə dəfə artıq olmalı
+      absoluteThreshold: 2000, // Mütləq threshold (ms)
+      iqrMultiplier: 1.5, // IQR üçün outlier faktoru
+      useIQR: true, // IQR methodunu istifadə et
+    };
+
+    // Son 30 yoxlamanı götür (statistik əhəmiyyət üçün)
     const recent = await dbAll(
-      `SELECT response_time FROM checks WHERE site_id = ? AND status = 'online' AND response_time IS NOT NULL ORDER BY checked_at DESC LIMIT 10 OFFSET 1`,
+      `SELECT response_time FROM checks WHERE site_id = ? AND status = 'online' AND response_time IS NOT NULL ORDER BY checked_at DESC LIMIT 30 OFFSET 1`,
       [site.id]
     );
-    if (recent.length < 5) return; // Kifayət qədər məlumat yoxdur
+    if (recent.length < config.minSamples) return;
 
-    const avg = recent.reduce((s, r) => s + r.response_time, 0) / recent.length;
-    // 3x artıbsa VƏ 2000ms-dən çoxdursa xəbərdarlıq
-    if (currentResponseTime > avg * 3 && currentResponseTime > 2000) {
+    const times = recent.map(r => r.response_time).sort((a, b) => a - b);
+    const avg = times.reduce((s, t) => s + t, 0) / times.length;
+
+    let isAnomaly = false;
+    let anomalyReason = '';
+
+    if (config.useIQR) {
+      // IQR (Interquartile Range) method — statistik outlier detection
+      const q1Index = Math.floor(times.length * 0.25);
+      const q3Index = Math.floor(times.length * 0.75);
+      const q1 = times[q1Index];
+      const q3 = times[q3Index];
+      const iqr = q3 - q1;
+      const upperBound = q3 + config.iqrMultiplier * iqr;
+
+      if (currentResponseTime > upperBound && currentResponseTime > config.absoluteThreshold) {
+        isAnomaly = true;
+        anomalyReason = `IQR outlier: ${currentResponseTime}ms > ${Math.round(upperBound)}ms (Q3+${config.iqrMultiplier}×IQR)`;
+      }
+    } else {
+      // Sadə multiplier method
+      if (currentResponseTime > avg * config.multiplier && currentResponseTime > config.absoluteThreshold) {
+        isAnomaly = true;
+        anomalyReason = `${Math.round(currentResponseTime / avg)}x yavaş (${currentResponseTime}ms vs orta ${Math.round(avg)}ms)`;
+      }
+    }
+
+    if (isAnomaly) {
       // Bu gün bu sayt üçün artıq xəbərdarlıq göndərmişiksə, skip et
       const today = new Date().toISOString().split('T')[0];
       const alreadySent = await dbGet(
@@ -643,16 +688,21 @@ async function checkResponseTimeAlert(site, currentResponseTime) {
       const webhooks = webhooksRow ? JSON.parse(webhooksRow.value) : null;
       const smtp = smtpRow ? JSON.parse(smtpRow.value) : null;
 
-      const msg = `🐌 **Sayt Yavaşlayıb**\n\n**Sayt:** ${site.name}\n**URL:** ${site.url}\n**Cari cavab müddəti:** ${currentResponseTime}ms\n**Normal orta:** ${Math.round(avg)}ms\n**${Math.round(currentResponseTime / avg)}x yavaş!**`;
+      // Trend analizi: son 5 yoxlamada getdikcə artırmı?
+      const last5 = recent.slice(0, 5).map(r => r.response_time);
+      const isIncreasing = last5.every((val, i) => i === 0 || val >= last5[i - 1]);
+      const trendWarning = isIncreasing ? '\n\n⚠️ **Trend:** Response time artmaqdadır!' : '';
+
+      const msg = `🐌 **Performans Anomaliyası**\n\n**Sayt:** ${site.name}\n**URL:** ${site.url}\n**Cari:** ${currentResponseTime}ms\n**Orta (son 30):** ${Math.round(avg)}ms\n**Səbəb:** ${anomalyReason}${trendWarning}`;
       await sendExpiryNotification(msg, webhooks, smtp, site);
       await dbRun(
         "INSERT OR IGNORE INTO expiry_alerts (site_id, alert_type, alerted_date) VALUES (?, 'response_slow', ?)",
         [site.id, today]
       );
-      console.log(`Response time alert: ${site.name} (${currentResponseTime}ms vs avg ${Math.round(avg)}ms)`);
+      console.log(`🚨 Anomaly detected: ${site.name} — ${anomalyReason}`);
     }
   } catch (err) {
-    // Xəta olsa skip et
+    console.error('Anomaly detection error:', err.message);
   }
 }
 // Domain və Hosting bitmə xəbərdarlıqları
@@ -832,3 +882,222 @@ async function sendExpiryNotification(message, webhooks, smtp, site) {
     await logNotification(site?.id, sentChannels.join('+'), message);
   }
 }
+
+
+// =====================================================
+// MULTI-REGION CHECK FUNCTIONS
+// =====================================================
+
+// Multi-region check — majority vote ilə false-positive azaltma
+async function performMultiRegionCheck(site) {
+  const results = [];
+  
+  for (const region of REGION_PROBES) {
+    try {
+      const result = await checkSiteFromRegion(site, region);
+      results.push({ region: region.name, ...result });
+      
+      // DB-yə yaz
+      await dbRun(
+        `INSERT INTO region_checks (site_id, region, status, http_code, response_time, error) VALUES (?, ?, ?, ?, ?, ?)`,
+        [site.id, region.name, result.status, result.http_code, result.response_time, result.error]
+      );
+    } catch (err) {
+      console.error(`Region check failed (${region.name}):`, err.message);
+      await dbRun(
+        `INSERT INTO region_checks (site_id, region, status, error) VALUES (?, ?, 'error', ?)`,
+        [site.id, region.name, err.message]
+      );
+    }
+  }
+
+  // Majority vote: əksəriyyət "offline" deyirsə, həqiqətən down-dır
+  const offlineCount = results.filter(r => r.status === 'offline').length;
+  const onlineCount = results.filter(r => r.status === 'online').length;
+  const finalStatus = offlineCount > onlineCount ? 'offline' : 'online';
+
+  // Orta response time (online olan region-lardan)
+  const onlineResults = results.filter(r => r.status === 'online' && r.response_time);
+  const avgResponseTime = onlineResults.length > 0
+    ? Math.round(onlineResults.reduce((sum, r) => sum + r.response_time, 0) / onlineResults.length)
+    : null;
+
+  return {
+    status: finalStatus,
+    regions: results,
+    avgResponseTime,
+    consensus: `${onlineCount}/${results.length} online`,
+    falsePositiveMitigated: offlineCount > 0 && offlineCount < results.length, // bəzi region-lar offline, bəziləri online
+  };
+}
+
+async function checkSiteFromRegion(site, region) {
+  const startTime = Date.now();
+  
+  try {
+    // Əgər region endpoint yoxdursa, lokal check et
+    if (!region.endpoint) {
+      return await localSiteCheck(site);
+    }
+
+    // Distributed probe endpoint-i çağır (future implementation)
+    // Məsələn: POST https://probe-us-east.example.com/check
+    // Body: { url: site.url }
+    const response = await axios.post(region.endpoint, { url: site.url }, {
+      timeout: 15000,
+      validateStatus: () => true, // bütün status kodları qəbul et
+    });
+
+    return {
+      status: response.data.status,
+      http_code: response.data.http_code,
+      response_time: response.data.response_time,
+      error: response.data.error,
+    };
+  } catch (err) {
+    return {
+      status: 'error',
+      http_code: null,
+      response_time: Date.now() - startTime,
+      error: err.message,
+    };
+  }
+}
+
+// Lokal site check (single region)
+async function localSiteCheck(site) {
+  const startTime = Date.now();
+  
+  try {
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // self-signed SSL-lərə icazə ver
+    });
+
+    const response = await axios.get(site.url, {
+      timeout: 15000,
+      httpsAgent,
+      validateStatus: () => true, // bütün status kodları qəbul et
+      maxRedirects: 5,
+    });
+
+    const responseTime = Date.now() - startTime;
+    const status = response.status >= 200 && response.status < 400 ? 'online' : 'offline';
+
+    return {
+      status,
+      http_code: response.status,
+      response_time: responseTime,
+      error: status === 'offline' ? `HTTP ${response.status}` : null,
+    };
+  } catch (err) {
+    return {
+      status: 'offline',
+      http_code: null,
+      response_time: Date.now() - startTime,
+      error: err.message,
+    };
+  }
+}
+
+// Export multi-region check funksiyası (index.js endpoint üçün)
+export { performMultiRegionCheck };
+
+
+// =====================================================
+// ESCALATION POLICY FUNCTIONS
+// =====================================================
+
+// Alert göndər və escalation tracker-ə qeyd et
+async function sendAlertWithEscalation(site, incidentId, alertType, message) {
+  try {
+    const escalationSettings = await dbGet("SELECT value FROM settings WHERE key = 'escalation'");
+    const config = escalationSettings 
+      ? JSON.parse(escalationSettings.value) 
+      : { primary: null, secondary: null, escalation_delay_minutes: 5 };
+
+    const webhooksRow = await dbGet("SELECT value FROM settings WHERE key = 'webhooks'");
+    const smtpRow = await dbGet("SELECT value FROM settings WHERE key = 'smtp'");
+    const webhooks = webhooksRow ? JSON.parse(webhooksRow.value) : null;
+    const smtp = smtpRow ? JSON.parse(smtpRow.value) : null;
+
+    // Primary contact-a göndər
+    const primaryContact = config.primary || smtp?.recipient || 'default';
+    await sendExpiryNotification(message, webhooks, smtp, site);
+
+    // DB-yə escalation qeyd et
+    const result = await dbRun(
+      `INSERT INTO alert_escalations (site_id, incident_id, alert_type, sent_to) VALUES (?, ?, ?, ?)`,
+      [site.id, incidentId, alertType, primaryContact]
+    );
+
+    const escalationId = result.lastID;
+
+    // Escalation check planla (N dəqiqə sonra)
+    if (config.secondary && config.escalation_delay_minutes > 0) {
+      setTimeout(async () => {
+        await checkAndEscalate(escalationId, site, incidentId, message, config, webhooks, smtp);
+      }, config.escalation_delay_minutes * 60 * 1000);
+    }
+
+    console.log(`✉️ Alert sent to ${primaryContact} (escalation ID: ${escalationId})`);
+  } catch (err) {
+    console.error('Escalation alert error:', err.message);
+  }
+}
+
+// Escalation check — acknowledge olunmayıbsa ikinci contact-a göndər
+async function checkAndEscalate(escalationId, site, incidentId, message, config, webhooks, smtp) {
+  try {
+    const escalation = await dbGet(
+      `SELECT * FROM alert_escalations WHERE id = ? AND acknowledged_at IS NULL`,
+      [escalationId]
+    );
+
+    // Acknowledge olunubsa, escalate etmə
+    if (!escalation) {
+      console.log(`✅ Alert ${escalationId} acknowledged — no escalation needed`);
+      return;
+    }
+
+    // İncident həll olunubsa, escalate etmə
+    if (incidentId) {
+      const incident = await dbGet(`SELECT * FROM incidents WHERE id = ? AND resolved_at IS NOT NULL`, [incidentId]);
+      if (incident) {
+        console.log(`✅ Incident ${incidentId} resolved — no escalation needed`);
+        return;
+      }
+    }
+
+    // Escalate et — ikinci contact-a göndər
+    const escalatedMessage = `🚨 **ESCALATED ALERT** (cavabsız qaldı)\n\n${message}\n\n⏰ İlk göndərilən: ${escalation.sent_at}\n📞 Primary contact cavab vermədi`;
+
+    // Secondary contact üçün smtp override (əgər fərqli email-dirsə)
+    const secondarySmtp = smtp ? { ...smtp, recipient: config.secondary } : null;
+    await sendExpiryNotification(escalatedMessage, webhooks, secondarySmtp, site);
+
+    // DB-də escalated flag qoy
+    await dbRun(`UPDATE alert_escalations SET escalated = 1 WHERE id = ?`, [escalationId]);
+
+    console.log(`🔥 Alert ${escalationId} escalated to ${config.secondary}`);
+  } catch (err) {
+    console.error('Escalation check error:', err.message);
+  }
+}
+
+// Alert acknowledge et
+async function acknowledgeAlert(escalationId, acknowledgedBy) {
+  try {
+    await dbRun(
+      `UPDATE alert_escalations SET acknowledged_at = datetime('now'), acknowledged_by = ? WHERE id = ?`,
+      [acknowledgedBy, escalationId]
+    );
+    console.log(`✅ Alert ${escalationId} acknowledged by ${acknowledgedBy}`);
+    return { success: true };
+  } catch (err) {
+    console.error('Acknowledge error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Export escalation funksiyaları
+export { sendAlertWithEscalation, acknowledgeAlert };

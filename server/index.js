@@ -147,20 +147,45 @@ if (fs.existsSync(clientDistPath)) {
 
 // === AUTH ===
 
-// Şifrəni yoxla — uğurlu olduqda JWT sessiya token-i qaytar
+import { 
+  generateTOTPSecret, 
+  generateQRCode, 
+  enable2FA, 
+  disable2FA, 
+  get2FAStatus, 
+  verify2FA,
+  is2FAEnabled 
+} from './totp.js';
+
+// Şifrəni yoxla — 2FA enabled-dirsə, token tələb et
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
   try {
-    const { password } = req.body;
+    const { password, totp_token } = req.body;
     if (!ADMIN_PASSWORD_HASH) {
       return res.status(500).json({ error: 'Server konfiqurasiyası tamamlanmayıb (ADMIN_PASSWORD_HASH yoxdur)' });
     }
+    
     const valid = await verifyPassword(password, ADMIN_PASSWORD_HASH);
-    if (valid) {
-      const token = signAdminToken(JWT_SECRET);
-      res.json({ success: true, token });
-    } else {
-      res.status(401).json({ error: 'Şifrə yanlışdır' });
+    if (!valid) {
+      return res.status(401).json({ error: 'Şifrə yanlışdır' });
     }
+
+    // 2FA enabled-dirsə, TOTP token-i yoxla
+    const needs2FA = await is2FAEnabled('admin');
+    if (needs2FA) {
+      if (!totp_token) {
+        return res.json({ success: false, requires2FA: true });
+      }
+
+      const totpValid = await verify2FA('admin', totp_token);
+      if (!totpValid) {
+        return res.status(401).json({ error: '2FA kod yanlışdır' });
+      }
+    }
+
+    // Şifrə + 2FA (əgər enabled-dirsə) uğurlu
+    const token = signAdminToken(JWT_SECRET);
+    res.json({ success: true, token });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -952,6 +977,430 @@ app.get('/api/sites/locations', async (req, res) => {
       WHERE l.latitude IS NOT NULL AND l.longitude IS NOT NULL
     `);
     res.json(locations);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Multi-region check results for a site
+app.get('/api/sites/:id/region-checks', async (req, res) => {
+  try {
+    const siteId = parseInt(req.params.id, 10);
+    
+    // Son 24 saatın region check-lərini götür
+    const checks = await dbAll(
+      `SELECT region, status, http_code, response_time, error, checked_at 
+       FROM region_checks 
+       WHERE site_id = ? AND checked_at > datetime('now', '-24 hours')
+       ORDER BY checked_at DESC`,
+      [siteId]
+    );
+
+    // Region-a görə qruplaşdır — son status
+    const byRegion = {};
+    checks.forEach(c => {
+      if (!byRegion[c.region]) {
+        byRegion[c.region] = { latest: c, history: [] };
+      }
+      byRegion[c.region].history.push(c);
+    });
+
+    res.json({ checks, byRegion });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === ESCALATION POLICY ENDPOINTS ===
+
+// Get escalation settings
+app.get('/api/settings/escalation', requireAuth, async (req, res) => {
+  try {
+    const row = await dbGet("SELECT value FROM settings WHERE key = 'escalation'");
+    const settings = row ? JSON.parse(row.value) : { primary: '', secondary: '', escalation_delay_minutes: 5 };
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save escalation settings
+app.post('/api/settings/escalation', requireAuth, async (req, res) => {
+  try {
+    const { primary, secondary, escalation_delay_minutes } = req.body;
+    const settings = JSON.stringify({ primary, secondary, escalation_delay_minutes });
+    await dbRun(
+      "INSERT OR REPLACE INTO settings (key, value) VALUES ('escalation', ?)",
+      [settings]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get alert escalation history
+app.get('/api/escalations', requireAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const escalations = await dbAll(
+      `SELECT e.*, s.name as site_name, s.url 
+       FROM alert_escalations e
+       JOIN sites s ON e.site_id = s.id
+       ORDER BY e.sent_at DESC
+       LIMIT ?`,
+      [limit]
+    );
+    res.json(escalations);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Acknowledge an alert
+app.post('/api/escalations/:id/acknowledge', requireAuth, async (req, res) => {
+  try {
+    const escalationId = parseInt(req.params.id, 10);
+    const { acknowledged_by } = req.body;
+    
+    await dbRun(
+      `UPDATE alert_escalations SET acknowledged_at = datetime('now'), acknowledged_by = ? WHERE id = ?`,
+      [acknowledged_by || 'admin', escalationId]
+    );
+    
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === 2FA (TOTP) ENDPOINTS ===
+
+// Get 2FA status
+app.get('/api/auth/2fa/status', requireAuth, async (req, res) => {
+  try {
+    // Hal-hazırda yalnız 'admin' user var
+    const user = await dbGet(`SELECT id, totp_enabled FROM users WHERE username = 'admin'`);
+    if (!user) {
+      return res.json({ enabled: false });
+    }
+    
+    const status = await get2FAStatus(user.id);
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Setup 2FA — QR kod və secret generate et
+app.post('/api/auth/2fa/setup', requireAuth, async (req, res) => {
+  try {
+    const user = await dbGet(`SELECT id FROM users WHERE username = 'admin'`);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const { secret, otpauth_url } = await generateTOTPSecret('admin');
+    const qrCode = await generateQRCode(otpauth_url);
+
+    // Secret-i temporarily DB-yə yaz (enabled=0 olaraq)
+    await dbRun(`UPDATE users SET totp_secret = ? WHERE id = ?`, [secret, user.id]);
+
+    res.json({ secret, qrCode, otpauth_url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Enable 2FA — verification token ilə
+app.post('/api/auth/2fa/enable', requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'TOTP token tələb olunur' });
+    }
+
+    const user = await dbGet(`SELECT id, totp_secret FROM users WHERE username = 'admin'`);
+    if (!user || !user.totp_secret) {
+      return res.status(400).json({ error: 'Əvvəlcə 2FA setup edin' });
+    }
+
+    // Token-i verify et
+    const valid = await verify2FA('admin', token);
+    if (!valid) {
+      return res.status(401).json({ error: '2FA kod yanlışdır' });
+    }
+
+    // Enable et
+    await enable2FA(user.id, user.totp_secret);
+    res.json({ success: true, message: '2FA aktivləşdirildi' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disable 2FA
+app.post('/api/auth/2fa/disable', requireAuth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ error: 'TOTP token tələb olunur (disable etmək üçün)' });
+    }
+
+    // Disable etməzdən əvvəl son bir dəfə verify et
+    const valid = await verify2FA('admin', token);
+    if (!valid) {
+      return res.status(401).json({ error: '2FA kod yanlışdır' });
+    }
+
+    const user = await dbGet(`SELECT id FROM users WHERE username = 'admin'`);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await disable2FA(user.id);
+    res.json({ success: true, message: '2FA söndürüldü' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === API KEY MANAGEMENT ENDPOINTS ===
+
+import { createAPIKey, verifyAPIKey, listAPIKeys, deleteAPIKey, requireAPIKey, requirePermission } from './apiKey.js';
+
+// API rate limiter — API key-ə görə fərqli limitlər (hal-hazırda ümumi)
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 dəqiqə
+  max: 100, // 100 request per window
+  message: 'Çox çox request göndərildi, bir az sonra yenidən cəhd edin',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Create API key (admin auth tələb edir)
+app.post('/api/admin/api-keys', requireAuth, async (req, res) => {
+  try {
+    const { name, permissions, rate_limit, expires_in_days } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'API key adı tələb olunur' });
+    }
+
+    const result = await createAPIKey(
+      name,
+      permissions || 'read',
+      rate_limit || 100,
+      expires_in_days || null
+    );
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List API keys (admin auth tələb edir)
+app.get('/api/admin/api-keys', requireAuth, async (req, res) => {
+  try {
+    const keys = await listAPIKeys();
+    res.json(keys);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete API key (admin auth tələb edir)
+app.delete('/api/admin/api-keys/:id', requireAuth, async (req, res) => {
+  try {
+    const keyId = parseInt(req.params.id, 10);
+    const result = await deleteAPIKey(keyId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === PUBLIC REST API (v1) ===
+
+// API documentation endpoint
+app.get('/api/v1', (req, res) => {
+  res.json({
+    version: '1.0.0',
+    name: 'Site Monitoring API',
+    documentation: 'https://github.com/yourusername/site-monitoring',
+    endpoints: {
+      'GET /api/v1/sites': 'Bütün saytları listələ',
+      'GET /api/v1/sites/:id': 'Konkret saytın məlumatı',
+      'GET /api/v1/sites/:id/checks': 'Saytın yoxlama tarixçəsi',
+      'GET /api/v1/sites/:id/stats': 'Saytın statistika məlumatları',
+      'POST /api/v1/sites': 'Yeni sayt əlavə et (write permission lazımdır)',
+      'PUT /api/v1/sites/:id': 'Saytı yenilə (write permission lazımdır)',
+      'DELETE /api/v1/sites/:id': 'Saytı sil (write permission lazımdır)',
+    },
+    authentication: 'x-api-key header və ya ?api_key=xxx query parameter',
+    rateLimit: '100 requests per 15 minutes',
+  });
+});
+
+// GET /api/v1/sites — Bütün saytları listələ
+app.get('/api/v1/sites', apiLimiter, requireAPIKey, async (req, res) => {
+  try {
+    const sites = await dbAll(`
+      SELECT 
+        s.*,
+        c.status, c.http_code, c.response_time, c.checked_at,
+        c.ssl_valid, c.ssl_days_remaining
+      FROM sites s
+      LEFT JOIN checks c ON s.id = c.site_id 
+        AND c.id = (SELECT id FROM checks WHERE site_id = s.id ORDER BY checked_at DESC LIMIT 1)
+      ORDER BY s.name
+    `);
+    res.json({ success: true, data: sites, count: sites.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/v1/sites/:id — Konkret saytın məlumatı
+app.get('/api/v1/sites/:id', apiLimiter, requireAPIKey, async (req, res) => {
+  try {
+    const siteId = parseInt(req.params.id, 10);
+    const site = await dbGet(`SELECT * FROM sites WHERE id = ?`, [siteId]);
+    
+    if (!site) {
+      return res.status(404).json({ error: 'Sayt tapılmadı' });
+    }
+
+    // Son yoxlamanı əlavə et
+    const lastCheck = await dbGet(
+      `SELECT * FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT 1`,
+      [siteId]
+    );
+
+    res.json({ success: true, data: { ...site, lastCheck } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/v1/sites/:id/checks — Saytın yoxlama tarixçəsi
+app.get('/api/v1/sites/:id/checks', apiLimiter, requireAPIKey, async (req, res) => {
+  try {
+    const siteId = parseInt(req.params.id, 10);
+    const limit = parseInt(req.query.limit, 10) || 100;
+    
+    const checks = await dbAll(
+      `SELECT * FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT ?`,
+      [siteId, limit]
+    );
+
+    res.json({ success: true, data: checks, count: checks.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/v1/sites/:id/stats — Saytın statistika məlumatları
+app.get('/api/v1/sites/:id/stats', apiLimiter, requireAPIKey, async (req, res) => {
+  try {
+    const siteId = parseInt(req.params.id, 10);
+    const days = parseInt(req.query.days, 10) || 30;
+
+    // Uptime hesabla
+    const checks = await dbAll(
+      `SELECT status FROM checks WHERE site_id = ? AND checked_at > datetime('now', '-${days} days')`,
+      [siteId]
+    );
+
+    const total = checks.length;
+    const online = checks.filter(c => c.status === 'online').length;
+    const uptimePercent = total > 0 ? ((online / total) * 100).toFixed(2) : 0;
+
+    // Orta response time
+    const avgResponseTime = await dbGet(
+      `SELECT AVG(response_time) as avg FROM checks WHERE site_id = ? AND status = 'online' AND checked_at > datetime('now', '-${days} days')`,
+      [siteId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        period_days: days,
+        total_checks: total,
+        online_checks: online,
+        uptime_percent: parseFloat(uptimePercent),
+        avg_response_time: avgResponseTime?.avg ? Math.round(avgResponseTime.avg) : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/v1/sites — Yeni sayt əlavə et (write permission)
+app.post('/api/v1/sites', apiLimiter, requireAPIKey, requirePermission('write'), async (req, res) => {
+  try {
+    const { name, url } = req.body;
+    
+    if (!name || !url) {
+      return res.status(400).json({ error: 'name və url tələb olunur' });
+    }
+
+    const result = await dbRun(
+      `INSERT INTO sites (name, url) VALUES (?, ?)`,
+      [name, url]
+    );
+
+    res.json({ success: true, id: result.lastID, message: 'Sayt əlavə edildi' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/v1/sites/:id — Saytı yenilə (write permission)
+app.put('/api/v1/sites/:id', apiLimiter, requireAPIKey, requirePermission('write'), async (req, res) => {
+  try {
+    const siteId = parseInt(req.params.id, 10);
+    const { name, url } = req.body;
+
+    if (!name && !url) {
+      return res.status(400).json({ error: 'Heç olmasa name və ya url göndərin' });
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (name) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (url) {
+      updates.push('url = ?');
+      values.push(url);
+    }
+
+    values.push(siteId);
+
+    await dbRun(
+      `UPDATE sites SET ${updates.join(', ')} WHERE id = ?`,
+      values
+    );
+
+    res.json({ success: true, message: 'Sayt yeniləndi' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/v1/sites/:id — Saytı sil (write permission)
+app.delete('/api/v1/sites/:id', apiLimiter, requireAPIKey, requirePermission('write'), async (req, res) => {
+  try {
+    const siteId = parseInt(req.params.id, 10);
+    
+    await dbRun(`DELETE FROM sites WHERE id = ?`, [siteId]);
+    
+    res.json({ success: true, message: 'Sayt silindi' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

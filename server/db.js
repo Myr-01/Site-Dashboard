@@ -242,6 +242,83 @@ export async function initDb() {
   // Migration: mövcud incidents cədvəlinə postmortem qeyd sütunu
   // (CREATE TABLE-dan SONRA olmalıdır — əks halda təzə DB-də cədvəl hələ mövcud olmur)
   try { await dbExec(`ALTER TABLE incidents ADD COLUMN resolution_note TEXT`); } catch {}
+
+  // Multi-region check results
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS region_checks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER NOT NULL,
+      region TEXT NOT NULL,
+      status TEXT NOT NULL,
+      http_code INTEGER,
+      response_time INTEGER,
+      error TEXT,
+      checked_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+    );
+  `);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_region_checks_site_id ON region_checks(site_id)`);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_region_checks_checked_at ON region_checks(checked_at)`);
+
+  // Escalation policy — alert acknowledgment və təkrar bildiriş
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS alert_escalations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      site_id INTEGER NOT NULL,
+      incident_id INTEGER,
+      alert_type TEXT NOT NULL,
+      sent_to TEXT NOT NULL,
+      sent_at TEXT DEFAULT (datetime('now')),
+      acknowledged_at TEXT,
+      acknowledged_by TEXT,
+      escalated INTEGER DEFAULT 0,
+      FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+      FOREIGN KEY (incident_id) REFERENCES incidents(id) ON DELETE SET NULL
+    );
+  `);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_alert_escalations_site_id ON alert_escalations(site_id)`);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_alert_escalations_acknowledged ON alert_escalations(acknowledged_at)`);
+
+  // Escalation contacts konfiqurasiyası (settings cədvəlində JSON olaraq saxlanacaq)
+  // Format: { primary: "email@example.com", secondary: "oncall@example.com", escalation_delay_minutes: 5 }
+
+  // 2FA (TOTP) — admin user üçün
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      totp_secret TEXT,
+      totp_enabled INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Migration: mövcud admin credentials-i users cədvəlinə köçür (əgər varsa)
+  try {
+    const adminHash = process.env.ADMIN_PASSWORD_HASH;
+    if (adminHash) {
+      await dbRun(
+        `INSERT OR IGNORE INTO users (username, password_hash) VALUES ('admin', ?)`,
+        [adminHash]
+      );
+    }
+  } catch {}
+
+  // API keys — Public REST API üçün
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      permissions TEXT DEFAULT 'read',
+      rate_limit INTEGER DEFAULT 100,
+      last_used_at TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      expires_at TEXT
+    );
+  `);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)`);
 }
 
 export default db;
