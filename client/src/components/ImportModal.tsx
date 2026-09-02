@@ -55,7 +55,7 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
       <div className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
         <h2 className="text-xl font-heading font-bold text-white mb-4">Import Sites from CSV</h2>
         <p className="text-text-muted text-sm mb-4">

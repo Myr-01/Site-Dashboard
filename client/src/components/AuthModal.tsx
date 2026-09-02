@@ -64,7 +64,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
 
   return (
     <div
-      className={`fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] transition-opacity duration-200 ${
+      className={`fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[1010] transition-opacity duration-200 ${
         isVisible ? 'opacity-100' : 'opacity-0'
       }`}
       onClick={handleClose}

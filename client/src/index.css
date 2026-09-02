@@ -108,6 +108,39 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Inter', sans-serif;
 }
 
+/* Leaflet z-index fix — xəritə modal-ların üstünə çıxmasın.
+   Leaflet default olaraq pane-lərə (z-index 200-700) və control-lara
+   (z-index 800-1000) yüksək dəyərlər verir. Modal-lar z-50 (Tailwind = z-index 50)
+   istifadə etdiyi üçün xəritə onların üstündə qalırdı. Leaflet-in bütün
+   qatlarını z-index 0-10 aralığına salırıq. */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+  z-index: 1 !important;
+}
+
+.leaflet-map-pane { z-index: 1 !important; }
+.leaflet-tile-pane { z-index: 2 !important; }
+.leaflet-overlay-pane { z-index: 3 !important; }
+.leaflet-shadow-pane { z-index: 4 !important; }
+.leaflet-marker-pane { z-index: 5 !important; }
+.leaflet-tooltip-pane { z-index: 6 !important; }
+.leaflet-popup-pane { z-index: 7 !important; }
+
+.leaflet-control-container,
+.leaflet-top,
+.leaflet-bottom,
+.leaflet-control {
+  z-index: 8 !important;
+}
+
 .leaflet-bar a {
   background-color: #14213d !important;
   color: #fca311 !important;

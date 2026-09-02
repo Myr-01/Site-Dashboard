@@ -88,7 +88,7 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
 
   return (
     <div
-      className={`fixed inset-0 flex items-center justify-center z-[80] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      className={`fixed inset-0 flex items-center justify-center z-[1100] transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'}`}
       style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)' }}
       onClick={() => { if (isAlert) close(true); else handleCancel(); }}
     >
