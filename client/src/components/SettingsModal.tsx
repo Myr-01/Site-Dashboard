@@ -149,13 +149,15 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       onClick={onClose}
     >
       <div 
-        className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto scrollbar-thin"
+        className="bg-navy-surface border border-border rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-xl font-heading font-bold text-white mb-6">Parametrlər</h2>
-        
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-border">
+        {/* Sabit header — scroll etmir */}
+        <div className="px-6 pt-6 pb-0 shrink-0">
+          <h2 className="text-xl font-heading font-bold text-white mb-6">Parametrlər</h2>
+          
+          {/* Tabs */}
+          <div className="flex gap-2 border-b border-border">
           <button
             onClick={() => setActiveTab('email')}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
@@ -183,11 +185,14 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 ? 'border-accent text-accent'
                 : 'border-transparent text-text-muted hover:text-white'
             }`}
-          >
-            Backup
-          </button>
+            >
+              Backup
+            </button>
+          </div>
         </div>
 
+        {/* Scroll olan content sahəsi */}
+        <div className="px-6 py-6 overflow-y-auto scrollbar-thin flex-1">
         {/* Tab Content */}
         {activeTab === 'email' && (
           <>
@@ -398,8 +403,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         {activeTab === 'backups' && (
           <BackupTab />
         )}
+        </div>
 
-        <div className="flex justify-end pt-4 mt-4 border-t border-border">
+        {/* Sabit footer — scroll etmir */}
+        <div className="flex justify-end px-6 py-4 border-t border-border shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm border border-border text-text-muted rounded-lg hover:text-white transition-colors"
