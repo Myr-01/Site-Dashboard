@@ -60,15 +60,18 @@ export default function WorldMap() {
               center={center}
               zoom={locations.length > 0 ? 3 : 2}
               minZoom={2}
-              maxZoom={18}
+              maxZoom={16}
               scrollWheelZoom={true}
               worldCopyJump={true}
               style={{ height: '100%', width: '100%', background: '#14213d' }}
             >
-              {/* Dark themed tiles (CartoDB dark_matter, free, no API key) */}
+              {/* Dark themed tiles (Esri World Dark Gray, free, no API key).
+                  CARTO dark_all artıq API key tələb edir və key-siz sorğulara
+                  "API KEY REQUIRED" watermark-ı əlavə edir, ona görə Esri-yə keçildi. */}
               <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+                attribution='&copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap contributors'
+                maxZoom={16}
               />
 
               {locations.map(location => {
