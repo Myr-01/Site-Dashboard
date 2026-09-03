@@ -27,10 +27,21 @@ const BrandingContext = createContext<BrandingContextValue>({
   applyBranding: () => {},
 });
 
+// hex (#fca311) → "252 163 17" RGB komponent stringi (Tailwind opacity üçün)
+function hexToRgbComponents(hex: string): string | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim());
+  if (!m) return null;
+  return `${parseInt(m[1], 16)} ${parseInt(m[2], 16)} ${parseInt(m[3], 16)}`;
+}
+
 // Branding-i DOM-a tətbiq et: accent rəng, səhifə başlığı, favicon
 function applyToDocument(b: Branding) {
-  // Accent rəng (CSS variable → tailwind accent)
+  // Accent rəng (CSS variable → tailwind accent). RGB komponentləri olaraq saxlanılır
+  // ki, opacity modifikatorları (accent/30, bg-accent/10) düzgün işləsin.
   if (b.primary_color) {
+    const rgb = hexToRgbComponents(b.primary_color);
+    if (rgb) document.documentElement.style.setProperty('--accent-rgb', rgb);
+    // Solid hex də saxla (inline style-larda istifadə olunanlar üçün)
     document.documentElement.style.setProperty('--accent-color', b.primary_color);
   }
   // Səhifə başlığı

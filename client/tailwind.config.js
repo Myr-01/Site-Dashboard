@@ -7,8 +7,9 @@ export default {
         bg: '#000000',
         'navy-surface': '#14213d',
         'navy-light': '#1d2d4f',
-        // accent runtime-da branding rənginə görə dəyişir (index.css :root --accent-color)
-        accent: 'var(--accent-color, #fca311)',
+        // accent runtime-da branding rənginə görə dəyişir (index.css :root --accent-rgb).
+        // RGB komponent formatı — opacity modifikatorları (accent/30, bg-accent/10) düzgün işləsin.
+        accent: 'rgb(var(--accent-rgb, 252 163 17) / <alpha-value>)',
         'text-muted': '#9aa3b8',
         border: 'rgba(229, 229, 229, 0.1)',
       },

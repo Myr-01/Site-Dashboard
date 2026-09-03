@@ -6,9 +6,10 @@
   box-sizing: border-box;
 }
 
-/* Branding accent rəngi — runtime-da admin panel tərəfindən dəyişdirilir */
+/* Branding accent rəngi — runtime-da admin panel tərəfindən dəyişdirilir.
+   RGB komponentləri (boşluqla) — Tailwind opacity modifikatorları üçün. */
 :root {
-  --accent-color: #fca311;
+  --accent-rgb: 252 163 17;
 }
 
 /* Splash ekranı — yüklənmə xətti animasiyası */
