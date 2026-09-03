@@ -7,7 +7,8 @@ export default {
         bg: '#000000',
         'navy-surface': '#14213d',
         'navy-light': '#1d2d4f',
-        accent: '#fca311',
+        // accent runtime-da branding rənginə görə dəyişir (index.css :root --accent-color)
+        accent: 'var(--accent-color, #fca311)',
         'text-muted': '#9aa3b8',
         border: 'rgba(229, 229, 229, 0.1)',
       },

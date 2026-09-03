@@ -294,14 +294,16 @@ export async function initDb() {
       email TEXT UNIQUE,
       password_hash TEXT NOT NULL,
       role TEXT DEFAULT 'user',
+      disabled INTEGER DEFAULT 0,
       totp_secret TEXT,
       totp_enabled INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
-  // Migration: köhnə users cədvəlinə email və role sütunları əlavə et
+  // Migration: köhnə users cədvəlinə email, role və disabled sütunları əlavə et
   try { await dbExec(`ALTER TABLE users ADD COLUMN email TEXT`); } catch {}
   try { await dbExec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`); } catch {}
+  try { await dbExec(`ALTER TABLE users ADD COLUMN disabled INTEGER DEFAULT 0`); } catch {}
   // email üçün unikallıq indeksi (NULL-lara icazə verir — köhnə username-only sətirlər üçün)
   try { await dbExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL`); } catch {}
 

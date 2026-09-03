@@ -166,6 +166,82 @@ export function logout(): void {
   clearCachedUser();
 }
 
+// === ADMIN PANEL API HELPER-LƏRİ ===
+
+export interface AdminStats { total_users: number; total_sites: number; issue_sites: number; }
+export interface AdminUser {
+  id: number; email: string | null; username: string | null;
+  role: string; disabled: number; created_at: string; site_count: number;
+}
+export interface AdminSite {
+  id: number; name: string; url: string; group_name: string | null;
+  maintenance_mode: number; created_at: string;
+  owner_email: string | null; owner_id: number | null;
+  status: string | null; checked_at: string | null;
+}
+
+async function adminGet<T>(path: string): Promise<T> {
+  const res = await fetch(apiUrl(path), { headers: authHeaders() });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export const adminApi = {
+  stats: () => adminGet<AdminStats>('/api/admin/stats'),
+  users: () => adminGet<AdminUser[]>('/api/admin/users'),
+  sites: () => adminGet<AdminSite[]>('/api/admin/sites'),
+
+  async setUserDisabled(id: number, disabled: boolean) {
+    const res = await fetch(apiUrl(`/api/admin/users/${id}/disable`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify({ disabled }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async deleteUser(id: number) {
+    const res = await fetch(apiUrl(`/api/admin/users/${id}`), {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async regeneratePasscode() {
+    const res = await fetch(apiUrl('/api/admin/sensitive-code/regenerate'), {
+      method: 'POST',
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async saveBranding(data: { title?: string; primary_color?: string }) {
+    const res = await fetch(apiUrl('/api/admin/branding'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
+
+  async uploadBrandingImage(kind: 'logo' | 'favicon', file: File) {
+    const fd = new FormData();
+    fd.append(kind, file);
+    const res = await fetch(apiUrl(`/api/admin/branding/${kind}`), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: fd,
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    return res.json();
+  },
+};
+
 /**
  * Tətbiqin auth vəziyyətini idarə edən hook.
  * user null = giriş edilməyib (login səhifəsi göstərilməlidir).

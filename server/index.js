@@ -14,7 +14,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { initDb, backfillMultiUser, dbRun, dbGet, dbAll } from './db.js';
-import { getCurrentCode, verifyCode, isLockedOut, recordFailedAttempt, clearFailedAttempts } from './sensitiveCode.js';
+import { getCurrentCode, verifyCode, isLockedOut, recordFailedAttempt, clearFailedAttempts, regenerateCode } from './sensitiveCode.js';
 import { isSafeFilename, createRequireAuth, verifyPassword, hashPassword, signAdminToken, signUserToken, verifyToken, isValidAdminToken, normalizeAlertDays } from './utils.js';
 import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
@@ -88,6 +88,30 @@ const siteBackupUpload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // Max 500MB
 });
 
+// Branding faylları (logo/favicon) — persistent volume-da saxlanılır, /branding/ ilə serve olunur
+const BRANDING_DIR = path.join(DATA_DIR, 'branding');
+if (!fs.existsSync(BRANDING_DIR)) fs.mkdirSync(BRANDING_DIR, { recursive: true });
+const brandingUpload = multer({
+  storage: multer.diskStorage({
+    destination: BRANDING_DIR,
+    filename: (req, file, cb) => {
+      // Sabit adlar — köhnəni üzərinə yazır, disk şişməsin
+      const ext = (file.originalname.match(/\.[a-zA-Z0-9]+$/) || ['.png'])[0].toLowerCase();
+      const base = file.fieldname === 'favicon' ? 'favicon' : 'logo';
+      cb(null, `${base}${ext}`);
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  fileFilter: (req, file, cb) => {
+    // Yalnız şəkil faylları
+    if (/^image\/(png|jpe?g|gif|webp|svg\+xml|x-icon|vnd\.microsoft\.icon)$/.test(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Yalnız şəkil faylları qəbul edilir'));
+    }
+  },
+});
+
 /**
  * Faylı köçür. Fərqli faylsistemlər arasında `rename` EXDEV verir —
  * o halda kopyala + sil ilə davam et.
@@ -139,6 +163,9 @@ app.get('/api/health', async (req, res) => {
 app.get('/status', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'status.html'));
 });
+
+// Branding fayllarını serve et (logo/favicon) — auth tələb etmir (public assets)
+app.use('/branding', express.static(BRANDING_DIR));
 
 // Serve static files (production build)
 const clientDistPath = path.join(__dirname, '../client/dist');
@@ -212,13 +239,18 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
     const user = await dbGet(
-      'SELECT id, email, username, password_hash, role FROM users WHERE email = ?',
+      'SELECT id, email, username, password_hash, role, disabled FROM users WHERE email = ?',
       [normalizedEmail]
     );
 
     // Timing-safe olmasa da, mesajı ümumi saxlayırıq ki user enumeration olmasın
     if (!user || !user.password_hash) {
       return res.status(401).json({ error: 'Email və ya şifrə yanlışdır' });
+    }
+
+    // Deaktiv edilmiş hesab (admin tərəfindən bloklanıb)
+    if (user.disabled) {
+      return res.status(403).json({ error: 'Hesab deaktiv edilib. Admin ilə əlaqə saxlayın.' });
     }
 
     const valid = await verifyPassword(password, user.password_hash);
@@ -341,6 +373,14 @@ app.post('/api/auth/verify', authLimiter, async (req, res) => {
 // Admin əməliyyatları üçün middleware — JWT sessiya token-i yoxlanılır
 const requireAuth = createRequireAuth(JWT_SECRET);
 
+// Yalnız admin rolu üçün — requireAuth-dan SONRA istifadə et
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Yalnız admin üçün' });
+  }
+  next();
+}
+
 /**
  * Həssas əməliyyatlar (sayt əlavə etmə, credential-lara baxış) üçün rotating passcode yoxlaması.
  * Admin (role='admin') tam istisnadır — passcode tələb olunmur.
@@ -404,6 +444,184 @@ app.get('/api/admin/sensitive-code', requireAuth, async (req, res) => {
     }
     const { code, generated_at, expires_at } = await getCurrentCode();
     res.json({ code, generated_at, expires_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Passcode-u dərhal yenilə (admin "force regenerate")
+app.post('/api/admin/sensitive-code/regenerate', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { code, generated_at, expires_at } = await regenerateCode();
+    res.json({ code, generated_at, expires_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === ADMIN PANEL — İDARƏETMƏ ENDPOINT-LƏRİ ===
+
+// Aqreqat statistika (bütün user-lər üzrə)
+app.get('/api/admin/stats', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const totalUsers = await dbGet('SELECT COUNT(*) AS n FROM users');
+    const totalSites = await dbGet('SELECT COUNT(*) AS n FROM sites');
+    // Problemli saytlar: son yoxlaması offline olan (baxımda olanlar sayılmır)
+    const issueSites = await dbGet(`
+      SELECT COUNT(*) AS n FROM sites s
+      WHERE s.maintenance_mode = 0 AND EXISTS (
+        SELECT 1 FROM checks c
+        WHERE c.site_id = s.id
+          AND c.id = (SELECT id FROM checks WHERE site_id = s.id ORDER BY checked_at DESC LIMIT 1)
+          AND c.status = 'offline'
+      )
+    `);
+    res.json({
+      total_users: totalUsers.n,
+      total_sites: totalSites.n,
+      issue_sites: issueSites.n,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bütün istifadəçilər (idarəetmə cədvəli üçün)
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await dbAll(`
+      SELECT u.id, u.email, u.username, u.role, u.disabled, u.created_at,
+             COUNT(s.id) AS site_count
+      FROM users u
+      LEFT JOIN sites s ON s.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.role = 'admin' DESC, u.created_at DESC
+    `);
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// İstifadəçini deaktiv et / aktivləşdir (soft-disable)
+app.patch('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const disabled = req.body?.disabled ? 1 : 0;
+
+    const target = await dbGet('SELECT id, role FROM users WHERE id = ?', [userId]);
+    if (!target) return res.status(404).json({ error: 'İstifadəçi tapılmadı' });
+    // Admin özünü və ya digər admini deaktiv edə bilməz
+    if (target.role === 'admin') {
+      return res.status(400).json({ error: 'Admin hesabı deaktiv edilə bilməz' });
+    }
+
+    await dbRun('UPDATE users SET disabled = ? WHERE id = ?', [disabled, userId]);
+    res.json({ success: true, disabled: !!disabled });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// İstifadəçini sil (hard delete — saytları və əlaqəli data CASCADE ilə silinir)
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const target = await dbGet('SELECT id, role FROM users WHERE id = ?', [userId]);
+    if (!target) return res.status(404).json({ error: 'İstifadəçi tapılmadı' });
+    if (target.role === 'admin') {
+      return res.status(400).json({ error: 'Admin hesabı silinə bilməz' });
+    }
+    // Bu user-in saytları və onlara bağlı data (checks, incidents və s.) CASCADE ilə silinir
+    await dbRun('DELETE FROM sites WHERE user_id = ?', [userId]);
+    await dbRun('DELETE FROM users WHERE id = ?', [userId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Bütün saytlar + sahibi (admin cross-user görünüşü, read-only)
+app.get('/api/admin/sites', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const sites = await dbAll(`
+      SELECT s.id, s.name, s.url, s.group_name, s.maintenance_mode, s.created_at,
+             u.email AS owner_email, u.id AS owner_id,
+             c.status, c.checked_at
+      FROM sites s
+      LEFT JOIN users u ON s.user_id = u.id
+      LEFT JOIN checks c ON s.id = c.site_id
+        AND c.id = (SELECT id FROM checks WHERE site_id = s.id ORDER BY checked_at DESC LIMIT 1)
+      ORDER BY u.email, s.name
+    `);
+    res.json(sites);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === BRANDING (dashboard görünüşü — logo, rəng, başlıq) ===
+
+const DEFAULT_BRANDING = { logo_url: '', favicon_url: '', primary_color: '#fca311', title: 'Site Monitor' };
+
+async function getBranding() {
+  const row = await dbGet("SELECT value FROM settings WHERE key = 'branding'");
+  if (!row) return { ...DEFAULT_BRANDING };
+  try {
+    return { ...DEFAULT_BRANDING, ...JSON.parse(row.value) };
+  } catch {
+    return { ...DEFAULT_BRANDING };
+  }
+}
+
+// Branding oxu — PUBLIC (app load-da lazımdır, login-dən əvvəl də tətbiq olunur)
+app.get('/api/branding', async (req, res) => {
+  try {
+    res.json(await getBranding());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Branding sahələrini yenilə (title, primary_color) — admin-only
+app.post('/api/admin/branding', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const current = await getBranding();
+    const { title, primary_color } = req.body;
+    const next = { ...current };
+    if (typeof title === 'string') next.title = title.trim().slice(0, 60) || DEFAULT_BRANDING.title;
+    if (typeof primary_color === 'string' && /^#[0-9a-fA-F]{6}$/.test(primary_color)) {
+      next.primary_color = primary_color;
+    }
+    await dbRun("INSERT OR REPLACE INTO settings (key, value) VALUES ('branding', ?)", [JSON.stringify(next)]);
+    res.json(next);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Logo yüklə — admin-only
+app.post('/api/admin/branding/logo', requireAuth, requireAdmin, brandingUpload.single('logo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Fayl yüklənmədi' });
+    const current = await getBranding();
+    // Cache-busting üçün timestamp query
+    current.logo_url = `/branding/${req.file.filename}?v=${Date.now()}`;
+    await dbRun("INSERT OR REPLACE INTO settings (key, value) VALUES ('branding', ?)", [JSON.stringify(current)]);
+    res.json(current);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Favicon yüklə — admin-only
+app.post('/api/admin/branding/favicon', requireAuth, requireAdmin, brandingUpload.single('favicon'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Fayl yüklənmədi' });
+    const current = await getBranding();
+    current.favicon_url = `/branding/${req.file.filename}?v=${Date.now()}`;
+    await dbRun("INSERT OR REPLACE INTO settings (key, value) VALUES ('branding', ?)", [JSON.stringify(current)]);
+    res.json(current);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

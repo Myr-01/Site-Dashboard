@@ -94,3 +94,16 @@ export function recordFailedAttempt(userId) {
 export function clearFailedAttempts(userId) {
   failedAttempts.delete(userId);
 }
+
+/**
+ * Passcode-u dərhal yenidən yarat (admin "force regenerate" üçün).
+ * @returns {Promise<{code: string, generated_at: string, expires_at: string}>}
+ */
+export async function regenerateCode() {
+  const code = generateCode();
+  await dbRun(
+    "INSERT OR REPLACE INTO sensitive_action_code (id, code, generated_at) VALUES (1, ?, datetime('now'))",
+    [code]
+  );
+  return getCurrentCode();
+}

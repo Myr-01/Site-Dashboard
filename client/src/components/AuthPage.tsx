@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { loginWithEmail, registerWithEmail, fetchGuestAccounts, loginAsGuest, GuestAccount } from '../useAuth';
+import { useBranding } from '../BrandingContext';
+import { apiUrl } from '../api';
 
 interface AuthPageProps {
   onAuthenticated: () => void;
@@ -8,6 +10,7 @@ interface AuthPageProps {
 type Mode = 'login' | 'register' | 'guest';
 
 export default function AuthPage({ onAuthenticated }: AuthPageProps) {
+  const { branding } = useBranding();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -104,8 +107,12 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
       <div className="min-h-screen bg-bg flex items-center justify-center p-4">
         <div className="w-full max-w-sm">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-heading font-bold text-white">
-              <span className="text-accent">●</span> Site Monitor
+            <h1 className="text-2xl font-heading font-bold text-white flex items-center justify-center gap-2">
+              {branding.logo_url ? (
+                <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-9 w-auto max-w-[200px] object-contain" />
+              ) : (
+                <><span className="text-accent">●</span> {branding.title}</>
+              )}
             </h1>
             <p className="text-text-muted text-sm mt-1">Qonaq rejimi — yalnız baxış</p>
           </div>
@@ -157,8 +164,12 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-heading font-bold text-white">
-            <span className="text-accent">●</span> Site Monitor
+          <h1 className="text-2xl font-heading font-bold text-white flex items-center justify-center gap-2">
+            {branding.logo_url ? (
+              <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-9 w-auto max-w-[200px] object-contain" />
+            ) : (
+              <><span className="text-accent">●</span> {branding.title}</>
+            )}
           </h1>
           <p className="text-text-muted text-sm mt-1">Real-time website monitoring</p>
         </div>

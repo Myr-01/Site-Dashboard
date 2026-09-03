@@ -13,13 +13,17 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth, useAuthState, authHeaders, getAdminToken } from './useAuth';
 import { apiUrl } from './api';
 import { dialog } from './components/Dialog';
+import { useBranding } from './BrandingContext';
 
 const SiteDetailModal = lazy(() => import('./components/SiteDetailModal'));
 const SettingsModal = lazy(() => import('./components/SettingsModal'));
 const ImportModal = lazy(() => import('./components/ImportModal'));
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
 
 function App() {
   const { user, checking, onLoggedIn, doLogout } = useAuthState();
+  const { branding } = useBranding();
+  const [showAdmin, setShowAdmin] = useState(false);
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -231,14 +235,29 @@ function App() {
   const isAdmin = user.role === 'admin';
   const isGuest = user.role === 'guest';
 
+  // Admin panel açıqdırsa — onu göstər (mövcud dashboard yerinə)
+  if (isAdmin && showAdmin) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="min-h-screen bg-bg flex items-center justify-center"><p className="text-text-muted">Yüklənir...</p></div>}>
+          <AdminPanel user={user} onExit={() => setShowAdmin(false)} onLogout={doLogout} />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
     <div className="min-h-screen bg-bg p-4 md:p-8">
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-heading font-bold text-white">
-            <span className="text-accent">●</span> Site Monitor
+          <h1 className="text-2xl md:text-3xl font-heading font-bold text-white flex items-center gap-2">
+            {branding.logo_url ? (
+              <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-8 w-auto max-w-[160px] object-contain" />
+            ) : (
+              <><span className="text-accent">●</span> {branding.title}</>
+            )}
           </h1>
           <p className="text-text-muted text-sm mt-1">Real-time website monitoring dashboard</p>
           <p className="text-text-muted/70 text-xs mt-1">
@@ -249,7 +268,15 @@ function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Admin: canlı giriş kodu widget-i */}
+          {/* Admin: panel düyməsi + canlı giriş kodu widget-i */}
+          {isAdmin && (
+            <button
+              onClick={() => setShowAdmin(true)}
+              className="px-3 py-1.5 text-xs rounded-lg font-medium border border-accent/40 bg-accent/10 text-accent hover:bg-accent/20 transition-colors"
+            >
+              Admin Panel
+            </button>
+          )}
           {isAdmin && <PasscodeWidget />}
 
           {/* Account menu */}

@@ -6,6 +6,11 @@
   box-sizing: border-box;
 }
 
+/* Branding accent rəngi — runtime-da admin panel tərəfindən dəyişdirilir */
+:root {
+  --accent-color: #fca311;
+}
+
 body {
   margin: 0;
   padding: 0;
