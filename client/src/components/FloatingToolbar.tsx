@@ -9,6 +9,7 @@ interface FloatingToolbarProps {
   totalSites: number;
   onlineCount: number;
   offlineCount: number;
+  isGuest?: boolean;
 }
 
 export default function FloatingToolbar({
@@ -19,6 +20,7 @@ export default function FloatingToolbar({
   totalSites,
   onlineCount,
   offlineCount,
+  isGuest = false,
 }: FloatingToolbarProps) {
   const [isVisible, setIsVisible] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -108,48 +110,53 @@ export default function FloatingToolbar({
           </span>
         </button>
 
-        {/* Add Site */}
-        <button
-          onClick={onAddSite}
-          className="relative group p-2 md:p-3 rounded-xl hover:bg-navy-light transition-colors flex-shrink-0"
-          title="Sayt Əlavə Et"
-        >
-          <svg className="w-5 h-5 md:w-6 md:h-6 text-text-muted group-hover:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-navy-light px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden md:block">
-            Sayt Əlavə Et
-          </span>
-        </button>
+        {/* Yazma əməliyyatları — qonaq üçün gizli */}
+        {!isGuest && (
+          <>
+            {/* Add Site */}
+            <button
+              onClick={onAddSite}
+              className="relative group p-2 md:p-3 rounded-xl hover:bg-navy-light transition-colors flex-shrink-0"
+              title="Sayt Əlavə Et"
+            >
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-text-muted group-hover:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-navy-light px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden md:block">
+                Sayt Əlavə Et
+              </span>
+            </button>
 
-        {/* Import CSV */}
-        <button
-          onClick={onImport}
-          className="relative group p-2 md:p-3 rounded-xl hover:bg-navy-light transition-colors flex-shrink-0"
-          title="CSV İdxal"
-        >
-          <svg className="w-5 h-5 md:w-6 md:h-6 text-text-muted group-hover:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-navy-light px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden md:block">
-            CSV İdxal
-          </span>
-        </button>
+            {/* Import CSV */}
+            <button
+              onClick={onImport}
+              className="relative group p-2 md:p-3 rounded-xl hover:bg-navy-light transition-colors flex-shrink-0"
+              title="CSV İdxal"
+            >
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-text-muted group-hover:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-navy-light px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden md:block">
+                CSV İdxal
+              </span>
+            </button>
 
-        {/* Settings */}
-        <button
-          onClick={onSettings}
-          className="relative group p-2 md:p-3 rounded-xl hover:bg-navy-light transition-colors flex-shrink-0"
-          title="Parametrlər"
-        >
-          <svg className="w-5 h-5 md:w-6 md:h-6 text-text-muted group-hover:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-navy-light px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden md:block">
-            Parametrlər
-          </span>
-        </button>
+            {/* Settings */}
+            <button
+              onClick={onSettings}
+              className="relative group p-2 md:p-3 rounded-xl hover:bg-navy-light transition-colors flex-shrink-0"
+              title="Parametrlər"
+            >
+              <svg className="w-5 h-5 md:w-6 md:h-6 text-text-muted group-hover:text-accent transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-navy-light px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap hidden md:block">
+                Parametrlər
+              </span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

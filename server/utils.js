@@ -42,11 +42,12 @@ export function isSafeFilename(name) {
  * @returns {string}
  */
 export function signUserToken(user, jwtSecret, expiresIn = '7d') {
-  return jwt.sign(
-    { user_id: user.id, role: user.role || 'user', email: user.email || null },
-    jwtSecret,
-    { expiresIn }
-  );
+  const payload = { user_id: user.id, role: user.role || 'user', email: user.email || null };
+  // Guest token: hansı user-in saytlarını görəcəyini daşıyır
+  if (user.role === 'guest' && user.guest_target != null) {
+    payload.guest_target = user.guest_target;
+  }
+  return jwt.sign(payload, jwtSecret, { expiresIn });
 }
 
 /**
@@ -103,6 +104,7 @@ export function createRequireAuth(jwtSecret) {
       id: payload.user_id ?? null,
       role: payload.role || 'user',
       email: payload.email ?? null,
+      guestTarget: payload.guest_target ?? null,
     };
     next();
   };

@@ -246,6 +246,59 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
+// === QONAQ (GUEST) GİRİŞİ ===
+// Hesab siyahısı — qonaq hansı istifadəçinin saytlarını görmək istədiyini seçir.
+// Public (auth tələb etmir), amma yalnız təhlükəsiz sahələr: id + label. Email tam göstərilmir.
+app.get('/api/auth/accounts', async (req, res) => {
+  try {
+    // Yalnız ən azı bir saytı olan hesabları göstər (boş hesablar qonaq üçün mənasızdır)
+    const users = await dbAll(`
+      SELECT u.id, u.email, u.role, COUNT(s.id) AS site_count
+      FROM users u
+      LEFT JOIN sites s ON s.user_id = u.id
+      GROUP BY u.id
+      HAVING site_count > 0
+      ORDER BY u.role = 'admin' DESC, u.email
+    `);
+    // Email-i qismən maskala (privacy) — qonaq tam email görməsin
+    const accounts = users.map(u => {
+      let label = u.email || 'İstifadəçi';
+      if (u.email && u.email.includes('@')) {
+        const [local, domain] = u.email.split('@');
+        const maskedLocal = local.length <= 2 ? local[0] + '•' : local.slice(0, 2) + '•••';
+        label = `${maskedLocal}@${domain}`;
+      }
+      return { id: u.id, label, is_admin: u.role === 'admin', site_count: u.site_count };
+    });
+    res.json(accounts);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Qonaq girişi — seçilmiş istifadəçinin saytlarını read-only görmək üçün token verir
+app.post('/api/auth/guest', authLimiter, async (req, res) => {
+  try {
+    const targetId = parseInt(req.body?.user_id, 10);
+    if (!Number.isInteger(targetId)) {
+      return res.status(400).json({ error: 'Hesab seçilməlidir' });
+    }
+    const target = await dbGet('SELECT id FROM users WHERE id = ?', [targetId]);
+    if (!target) {
+      return res.status(404).json({ error: 'Hesab tapılmadı' });
+    }
+    // Qonaq token: role='guest', guest_target=seçilmiş user. Öz user_id-si yoxdur.
+    const token = signUserToken(
+      { id: null, role: 'guest', email: null, guest_target: targetId },
+      JWT_SECRET,
+      '1d' // qonaq sessiyası qısa müddətli
+    );
+    res.json({ success: true, token, user: { id: null, email: null, role: 'guest' } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // === KÖHNƏ ADMIN GİRİŞİ (geriyə uyğunluq) ===
 // Yalnız password ilə admin girişi. Multi-user-ə keçidə qədər saxlanılır.
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
@@ -319,6 +372,10 @@ async function requireSensitiveAccess(req, res, next) {
 // Cari istifadəçi məlumatı (JWT-dən)
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
+    // Qonaq — DB user-i yoxdur, guest_target daşıyır
+    if (req.user.role === 'guest') {
+      return res.json({ id: null, email: null, role: 'guest', guest_target: req.user.guestTarget });
+    }
     if (req.user.id) {
       const user = await dbGet('SELECT id, email, username, role, created_at FROM users WHERE id = ?', [req.user.id]);
       if (user) {
@@ -379,9 +436,47 @@ async function getOwnedSite(siteId, user) {
   const site = await dbGet('SELECT * FROM sites WHERE id = ?', [siteId]);
   if (!site) return null;
   if (user?.role === 'admin') return site;
+  // Qonaq: yalnız seçdiyi hesabın saytlarını OXUYA bilər (write ayrıca bloklanır)
+  if (user?.role === 'guest') {
+    return site.user_id != null && site.user_id === user.guestTarget ? site : null;
+  }
   if (site.user_id != null && site.user_id === user?.id) return site;
   // Sahibsiz (köhnə) saytlar yalnız admin üçün — normal user görməməlidir
   return null;
+}
+
+// Qonaq üçün icazə verilən "təhlükəsiz" sayt sahələri (həssas datanı çıxarır)
+function toGuestSafeSite(site) {
+  const lc = site.latestCheck || {};
+  return {
+    id: site.id,
+    name: site.name,
+    url: site.url,
+    group_name: site.group_name,
+    color_tag: site.color_tag,
+    uptime: site.uptime,
+    maintenance_mode: site.maintenance_mode,
+    // Domain bitmə vaxtı qonaq üçün icazəlidir
+    manual_domain_expiry: site.manual_domain_expiry,
+    latestCheck: {
+      status: lc.status ?? null,
+      response_time: lc.response_time ?? null,
+      ssl_valid: lc.ssl_valid ?? null,
+      ssl_days_remaining: lc.ssl_days_remaining ?? null,
+      ssl_expiry: lc.ssl_expiry ?? null,
+      domain_expiry: lc.domain_expiry ?? null,
+      domain_days_remaining: lc.domain_days_remaining ?? null,
+      checked_at: lc.checked_at ?? null,
+    },
+  };
+}
+
+// Guest write əməliyyatlarını bloklayan middleware (403). requireAuth-dan sonra istifadə et.
+function blockGuestWrite(req, res, next) {
+  if (req.user?.role === 'guest') {
+    return res.status(403).json({ error: 'Qonaq rejimində bu əməliyyat mümkün deyil' });
+  }
+  next();
 }
 
 // Fayl endirmə endpoint-ləri üçün: brauzerin `window.open`-i custom header göndərə bilmir,
@@ -398,13 +493,19 @@ function requireAuthFlexible(req, res, next) {
     id: payload.user_id ?? null,
     role: payload.role || 'user',
     email: payload.email ?? null,
+    guestTarget: payload.guest_target ?? null,
   };
   next();
 }
 
-// Get all sites with latest check — yalnız cari user-in saytları (admin hamısını görür)
+// Get all sites with latest check — role-a görə scope
 app.get('/api/sites', requireAuth, async (req, res) => {
   try {
+    // Qonaq: seçdiyi hesabın saytları, YALNIZ təhlükəsiz sahələr
+    if (req.user.role === 'guest') {
+      const sites = await getAllSitesWithLatestCheck(req.user.guestTarget);
+      return res.json(sites.map(toGuestSafeSite));
+    }
     // Admin: bütün saytlar. Normal user: yalnız öz saytları.
     const sites = req.user.role === 'admin'
       ? await getAllSitesWithLatestCheck()
@@ -416,7 +517,7 @@ app.get('/api/sites', requireAuth, async (req, res) => {
 });
 
 // Add a site — sahibi cari user olur (rotating passcode yoxlaması aşağıda middleware ilə)
-app.post('/api/sites', requireAuth, requireSensitiveAccess, async (req, res) => {
+app.post('/api/sites', requireAuth, blockGuestWrite, requireSensitiveAccess, async (req, res) => {
   try {
     const { name, url, color_tag, alert_days } = req.body;
     if (!name || !url) {
@@ -435,7 +536,7 @@ app.post('/api/sites', requireAuth, requireSensitiveAccess, async (req, res) => 
 });
 
 // Delete a site — yalnız sahibi (və ya admin)
-app.delete('/api/sites/:id', requireAuth, async (req, res) => {
+app.delete('/api/sites/:id', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -450,7 +551,7 @@ app.delete('/api/sites/:id', requireAuth, async (req, res) => {
 });
 
 // Update manual dates for a site
-app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
+app.post('/api/sites/:id/manual-dates', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -468,7 +569,7 @@ app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
 });
 
 // Baxım rejimini aç/bağla
-app.patch('/api/sites/:id/maintenance', requireAuth, async (req, res) => {
+app.patch('/api/sites/:id/maintenance', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -483,7 +584,7 @@ app.patch('/api/sites/:id/maintenance', requireAuth, async (req, res) => {
 });
 
 // Yoxlama intervalını dəyiş (dəqiqə)
-app.patch('/api/sites/:id/interval', requireAuth, async (req, res) => {
+app.patch('/api/sites/:id/interval', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -501,7 +602,7 @@ app.patch('/api/sites/:id/interval', requireAuth, async (req, res) => {
 });
 
 // Hadisə üçün postmortem qeydi — incident-in aid olduğu sayt cari user-ə aid olmalıdır
-app.patch('/api/incidents/:id/note', requireAuth, async (req, res) => {
+app.patch('/api/incidents/:id/note', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     // Incident-in sahibliyini yoxla (sites.user_id üzərindən)
@@ -524,8 +625,8 @@ app.patch('/api/incidents/:id/note', requireAuth, async (req, res) => {
   }
 });
 
-// Göndərilmiş bildirişlərin tarixçəsi — yalnız cari user-in saytları (admin hamısını görür)
-app.get('/api/notifications', requireAuth, async (req, res) => {
+// Göndərilmiş bildirişlərin tarixçəsi — yalnız cari user-in saytları (admin hamısını görür; guest bloklanır)
+app.get('/api/notifications', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { site_id } = req.query;
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
@@ -620,7 +721,7 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 
 // === TREND (uzunmüddətli aggregate statistika) ===
 
-app.get('/api/sites/:id/trend', requireAuth, async (req, res) => {
+app.get('/api/sites/:id/trend', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -684,7 +785,7 @@ app.get('/api/public/status', async (req, res) => {
 // === EXPORT ===
 
 // CSV export — fayl endirmə olduğuna görə token header-də və ya ?token= query-də
-app.get('/api/export/csv', requireAuthFlexible, async (req, res) => {
+app.get('/api/export/csv', requireAuthFlexible, blockGuestWrite, async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
     const sites = isAdmin
@@ -726,7 +827,7 @@ app.get('/api/export/csv', requireAuthFlexible, async (req, res) => {
 });
 
 // Konfiqurasiya export — fayl endirmə, ona görə flexible auth
-app.get('/api/config/export', requireAuthFlexible, async (req, res) => {
+app.get('/api/config/export', requireAuthFlexible, blockGuestWrite, async (req, res) => {
   try {
     // DİQQƏT: giriş məlumatları (domain_username/password, hosting_username/password,
     // login URL-ləri) BİLƏRƏKDƏN daxil edilmir — bu fayl disk/email vasitəsilə paylaşıla bilər.
@@ -752,7 +853,7 @@ app.get('/api/config/export', requireAuthFlexible, async (req, res) => {
 });
 
 // Konfiqurasiya import
-app.post('/api/config/import', requireAuth, async (req, res) => {
+app.post('/api/config/import', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { sites } = req.body;
     if (!Array.isArray(sites)) {
@@ -807,8 +908,8 @@ app.post('/api/config/import', requireAuth, async (req, res) => {
   }
 });
 
-// Get access credentials for a site (READ) — həssas: ownership + rotating passcode (admin istisna)
-app.get('/api/sites/:id/credentials', requireAuth, requireSensitiveAccess, async (req, res) => {
+// Get access credentials for a site (READ) — həssas: guest bloklanır + ownership + rotating passcode
+app.get('/api/sites/:id/credentials', requireAuth, blockGuestWrite, requireSensitiveAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -825,7 +926,7 @@ app.get('/api/sites/:id/credentials', requireAuth, requireSensitiveAccess, async
 });
 
 // Update access credentials for a site — ownership yoxlanılır
-app.post('/api/sites/:id/credentials', requireAuth, async (req, res) => {
+app.post('/api/sites/:id/credentials', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -856,8 +957,8 @@ app.post('/api/sites/:id/credentials', requireAuth, async (req, res) => {
   }
 });
 
-// Get check history for a site — ownership yoxlanılır
-app.get('/api/sites/:id/history', requireAuth, async (req, res) => {
+// Get check history for a site — ownership yoxlanılır (guest üçün bloklanır: server_ip/hosting həssasdır)
+app.get('/api/sites/:id/history', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -872,8 +973,8 @@ app.get('/api/sites/:id/history', requireAuth, async (req, res) => {
   }
 });
 
-// Incident log for a site — ownership yoxlanılır
-app.get('/api/sites/:id/incidents', requireAuth, async (req, res) => {
+// Incident log for a site — ownership yoxlanılır (guest üçün bloklanır)
+app.get('/api/sites/:id/incidents', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -889,7 +990,7 @@ app.get('/api/sites/:id/incidents', requireAuth, async (req, res) => {
 });
 
 // Update site notes and group — ownership yoxlanılır
-app.post('/api/sites/:id/meta', requireAuth, async (req, res) => {
+app.post('/api/sites/:id/meta', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -906,8 +1007,8 @@ app.post('/api/sites/:id/meta', requireAuth, async (req, res) => {
   }
 });
 
-// Monthly uptime report for a site — ownership yoxlanılır
-app.get('/api/sites/:id/report', requireAuth, async (req, res) => {
+// Monthly uptime report for a site — ownership yoxlanılır (guest üçün bloklanır)
+app.get('/api/sites/:id/report', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const owned = await getOwnedSite(id, req.user);
@@ -953,7 +1054,7 @@ app.get('/api/sites/:id/report', requireAuth, async (req, res) => {
 });
 
 // PDF hesabat (fayl endirmə — token header-də və ya ?token= query-də ola bilər)
-app.get('/api/sites/:id/report/pdf', requireAuthFlexible, async (req, res) => {
+app.get('/api/sites/:id/report/pdf', requireAuthFlexible, blockGuestWrite, async (req, res) => {
   try {
     const { id } = req.params;
     const site = await getOwnedSite(id, req.user);
@@ -980,7 +1081,7 @@ app.get('/api/sites/:id/report/pdf', requireAuthFlexible, async (req, res) => {
 });
 
 // CSV import
-app.post('/api/import', requireAuth, upload.single('file'), async (req, res) => {
+app.post('/api/import', requireAuth, blockGuestWrite, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -1187,10 +1288,13 @@ app.get('/api/settings/webhooks', async (req, res) => {
   }
 });
 
-// Get all site locations for map — yalnız cari user-in saytları (admin hamısını görür)
+// Get all site locations for map — admin hamısını, user öz saytları, guest seçdiyi hesabın
+// (guest üçün server_ip/hosting çıxarılır — yalnız xəritə koordinatları)
 app.get('/api/sites/locations', requireAuth, async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
+    const isGuest = req.user.role === 'guest';
+    const scopeId = isGuest ? req.user.guestTarget : req.user.id;
     const locations = await dbAll(`
       SELECT 
         s.id, s.name, s.url,
@@ -1202,15 +1306,22 @@ app.get('/api/sites/locations', requireAuth, async (req, res) => {
       LEFT JOIN site_locations l ON s.id = l.site_id
       WHERE l.latitude IS NOT NULL AND l.longitude IS NOT NULL
       ${isAdmin ? '' : 'AND s.user_id = ?'}
-    `, isAdmin ? [] : [req.user.id]);
-    res.json(locations);
+    `, isAdmin ? [] : [scopeId]);
+    // Qonaq üçün həssas sahələri (IP, hosting, url) çıxar — yalnız xəritə + ad + status
+    const result = isGuest
+      ? locations.map(l => ({
+          id: l.id, name: l.name, status: l.status,
+          latitude: l.latitude, longitude: l.longitude, country: l.country, city: l.city,
+        }))
+      : locations;
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Multi-region check results for a site — ownership yoxlanılır
-app.get('/api/sites/:id/region-checks', requireAuth, async (req, res) => {
+// Multi-region check results for a site — ownership yoxlanılır (guest üçün bloklanır)
+app.get('/api/sites/:id/region-checks', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const siteId = parseInt(req.params.id, 10);
     const owned = await getOwnedSite(siteId, req.user);
@@ -1243,7 +1354,7 @@ app.get('/api/sites/:id/region-checks', requireAuth, async (req, res) => {
 // === ESCALATION POLICY ENDPOINTS ===
 
 // Get escalation settings
-app.get('/api/settings/escalation', requireAuth, async (req, res) => {
+app.get('/api/settings/escalation', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const row = await dbGet("SELECT value FROM settings WHERE key = 'escalation'");
     const settings = row ? JSON.parse(row.value) : { primary: '', secondary: '', escalation_delay_minutes: 5 };
@@ -1268,8 +1379,8 @@ app.post('/api/settings/escalation', requireAuth, async (req, res) => {
   }
 });
 
-// Get alert escalation history — yalnız cari user-in saytları (admin hamısını görür)
-app.get('/api/escalations', requireAuth, async (req, res) => {
+// Get alert escalation history — yalnız cari user-in saytları (admin hamısını görür; guest bloklanır)
+app.get('/api/escalations', requireAuth, blockGuestWrite, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 50;
     const isAdmin = req.user.role === 'admin';

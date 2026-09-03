@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { loginWithEmail, registerWithEmail } from '../useAuth';
+import { loginWithEmail, registerWithEmail, fetchGuestAccounts, loginAsGuest, GuestAccount } from '../useAuth';
 
 interface AuthPageProps {
   onAuthenticated: () => void;
 }
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'guest';
 
 export default function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [mode, setMode] = useState<Mode>('login');
@@ -16,8 +16,32 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [needs2FA, setNeeds2FA] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [accounts, setAccounts] = useState<GuestAccount[]>([]);
 
   const resetErrors = () => setError('');
+
+  // Qonaq axını — hesab siyahısını yüklə və guest rejiminə keç
+  const startGuestFlow = async () => {
+    setLoading(true);
+    setError('');
+    const list = await fetchGuestAccounts();
+    setLoading(false);
+    if (list.length === 0) {
+      setError('Hazırda baxıla biləcək hesab yoxdur');
+      return;
+    }
+    setAccounts(list);
+    setMode('guest');
+  };
+
+  const handleGuestSelect = async (userId: number) => {
+    setLoading(true);
+    setError('');
+    const res = await loginAsGuest(userId);
+    setLoading(false);
+    if (res.ok) onAuthenticated();
+    else setError(res.error || 'Qonaq girişi uğursuz oldu');
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,6 +97,60 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
     setTotpToken('');
     setConfirmPassword('');
   };
+
+  // === QONAQ HESAB SEÇİMİ EKRANI ===
+  if (mode === 'guest') {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-heading font-bold text-white">
+              <span className="text-accent">●</span> Site Monitor
+            </h1>
+            <p className="text-text-muted text-sm mt-1">Qonaq rejimi — yalnız baxış</p>
+          </div>
+
+          <div className="bg-navy-surface border border-border rounded-2xl p-6 shadow-2xl">
+            <h2 className="text-white font-heading font-medium text-base mb-1">Hesab seçin</h2>
+            <p className="text-text-muted text-xs mb-5">Kimin saytlarını izləmək istəyirsiniz?</p>
+
+            <div className="space-y-2">
+              {accounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  onClick={() => handleGuestSelect(acc.id)}
+                  disabled={loading}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-navy-light border border-border rounded-lg text-left hover:border-accent transition-colors disabled:opacity-50"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+                      <span className="text-accent text-xs font-medium">{acc.label.slice(0, 1).toUpperCase()}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white text-sm truncate">{acc.label}</p>
+                      <p className="text-text-muted text-xs">{acc.site_count} sayt{acc.is_admin ? ' · admin' : ''}</p>
+                    </div>
+                  </div>
+                  <svg className="w-4 h-4 text-text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              ))}
+            </div>
+
+            {error && <p className="text-red-400 text-xs mt-4">{error}</p>}
+
+            <button
+              onClick={() => switchMode('login')}
+              className="w-full mt-5 text-text-muted hover:text-white text-xs transition-colors"
+            >
+              ← Girişə qayıt
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center p-4">
@@ -182,6 +260,21 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
               <>Artıq hesabınız var? <button onClick={() => switchMode('login')} className="text-accent hover:underline">Giriş edin</button></>
             )}
           </p>
+
+          {/* Qonaq girişi */}
+          <div className="mt-5 pt-5 border-t border-border">
+            <button
+              type="button"
+              onClick={startGuestFlow}
+              disabled={loading}
+              className="w-full px-4 py-2.5 text-sm border border-border text-text-muted rounded-lg hover:text-white hover:border-accent/40 transition-colors disabled:opacity-50"
+            >
+              Qonaq kimi davam et →
+            </button>
+            <p className="text-text-muted/50 text-[11px] text-center mt-2">
+              Şifrəsiz, yalnız baxış rejimi
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -8,6 +8,7 @@ interface SiteCardProps {
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: number) => void;
+  isGuest?: boolean;
 }
 
 function getSeoScore(check: Site['latestCheck']): number {
@@ -34,24 +35,28 @@ export default function SiteCard({
   selectionMode = false,
   isSelected = false,
   onToggleSelect,
+  isGuest = false,
 }: SiteCardProps) {
   const check = site.latestCheck;
   const isOnline = check?.status === 'online';
   const isMaintenance = !!site.maintenance_mode;
   const seoScore = getSeoScore(check);
 
-  // Seçim rejimində karta klikləmək detal modalını açmaq yerinə seçimi dəyişir
+  // Seçim rejimində karta klikləmək detal modalını açmaq yerinə seçimi dəyişir.
+  // Qonaq üçün detal modalı açılmır (yalnız kart üzərindəki xülasə görünür).
   const handleCardClick = () => {
     if (selectionMode) {
       onToggleSelect?.(site.id);
-    } else {
+    } else if (!isGuest) {
       onSelect(site);
     }
   };
 
   return (
     <div
-      className={`relative bg-navy-surface border rounded-xl p-5 cursor-pointer hover:shadow-lg hover:shadow-accent/5 transition-[border-color,box-shadow] duration-200 group ${
+      className={`relative bg-navy-surface border rounded-xl p-5 transition-[border-color,box-shadow] duration-200 group ${
+        isGuest ? 'cursor-default' : 'cursor-pointer hover:shadow-lg hover:shadow-accent/5'
+      } ${
         isSelected ? 'border-accent' : 'border-border hover:border-accent/50'
       }`}
       onClick={handleCardClick}
@@ -114,10 +119,12 @@ export default function SiteCard({
       {/* Metrics */}
       {check ? (
         <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            <span className="text-text-muted text-xs">HTTP</span>
-            <p className="text-white font-medium">{check.http_code || '—'}</p>
-          </div>
+          {!isGuest && (
+            <div>
+              <span className="text-text-muted text-xs">HTTP</span>
+              <p className="text-white font-medium">{check.http_code || '—'}</p>
+            </div>
+          )}
           <div>
             <span className="text-text-muted text-xs">Response</span>
             <p className="text-white font-medium">{check.response_time ? `${check.response_time}ms` : '—'}</p>
@@ -155,14 +162,18 @@ export default function SiteCard({
               })()}
             </p>
           </div>
-          <div>
-            <span className="text-text-muted text-xs">Hosting</span>
-            <p className="text-accent font-medium text-xs">{check.hosting_provider || '—'}</p>
-          </div>
-          <div>
-            <span className="text-text-muted text-xs">SEO Score</span>
-            <p className="text-accent font-medium">{seoScore}/5</p>
-          </div>
+          {!isGuest && (
+            <div>
+              <span className="text-text-muted text-xs">Hosting</span>
+              <p className="text-accent font-medium text-xs">{check.hosting_provider || '—'}</p>
+            </div>
+          )}
+          {!isGuest && (
+            <div>
+              <span className="text-text-muted text-xs">SEO Score</span>
+              <p className="text-accent font-medium">{seoScore}/5</p>
+            </div>
+          )}
           <div>
             <span className="text-text-muted text-xs">Last Check</span>
             <p className="text-white font-medium text-xs">{formatTime(check.checked_at)}</p>

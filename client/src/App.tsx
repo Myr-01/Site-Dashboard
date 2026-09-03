@@ -202,7 +202,7 @@ function App() {
         setShowSearch(true);
         // Input açılma animasiyası başlayandan sonra fokusla
         requestAnimationFrame(() => searchInputRef.current?.focus());
-      } else if (e.key === 'n' || e.key === 'N') {
+      } else if ((e.key === 'n' || e.key === 'N') && user?.role !== 'guest') {
         e.preventDefault();
         withAuth(() => setShowAddModal(true));
       } else if (e.key === 'Escape' && selectionMode) {
@@ -212,7 +212,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [withAuth, selectionMode, exitSelectionMode]);
+  }, [withAuth, selectionMode, exitSelectionMode, user]);
 
   // Auth yoxlaması davam edir — qısa yüklənmə ekranı
   if (checking) {
@@ -229,6 +229,7 @@ function App() {
   }
 
   const isAdmin = user.role === 'admin';
+  const isGuest = user.role === 'guest';
 
   return (
     <ErrorBoundary>
@@ -253,8 +254,11 @@ function App() {
 
           {/* Account menu */}
           <div className="flex items-center gap-2 px-3 py-1.5 bg-navy-surface border border-border rounded-lg">
+            {isGuest && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">Qonaq</span>
+            )}
             <span className="text-text-muted text-xs max-w-[140px] truncate" title={user.email || undefined}>
-              {user.email || 'admin'}{isAdmin ? ' (admin)' : ''}
+              {isGuest ? 'Baxış rejimi' : (user.email || 'admin')}{isAdmin ? ' (admin)' : ''}
             </span>
             <button
               onClick={doLogout}
@@ -264,26 +268,29 @@ function App() {
             </button>
           </div>
 
-          {/* CSV Export */}
-          <button
-            onClick={() => withAuth(handleCsvExport)}
-            className="px-3 py-1.5 text-xs rounded-lg font-medium border border-border bg-navy-surface text-text-muted hover:text-white transition-colors"
-          >
-            CSV Export
-          </button>
+          {/* CSV Export və Seçim rejimi — qonaq üçün gizli */}
+          {!isGuest && (
+            <>
+              <button
+                onClick={() => withAuth(handleCsvExport)}
+                className="px-3 py-1.5 text-xs rounded-lg font-medium border border-border bg-navy-surface text-text-muted hover:text-white transition-colors"
+              >
+                CSV Export
+              </button>
 
-          {/* Seçim rejimi */}
-          <button
-            onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
-            aria-pressed={selectionMode}
-            className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors ${
-              selectionMode
-                ? 'bg-accent text-bg border-accent'
-                : 'bg-navy-surface border-border text-text-muted hover:text-white'
-            }`}
-          >
-            {selectionMode ? 'Seçimi bitir' : 'Seç'}
-          </button>
+              <button
+                onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
+                aria-pressed={selectionMode}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium border transition-colors ${
+                  selectionMode
+                    ? 'bg-accent text-bg border-accent'
+                    : 'bg-navy-surface border-border text-text-muted hover:text-white'
+                }`}
+              >
+                {selectionMode ? 'Seçimi bitir' : 'Seç'}
+              </button>
+            </>
+          )}
 
         {/* Search */}
         <div
@@ -399,10 +406,11 @@ function App() {
               key={site.id}
               site={site}
               onDelete={handleDelete}
-              onSelect={setSelectedSite}
+              onSelect={isGuest ? () => {} : setSelectedSite}
               selectionMode={selectionMode}
               isSelected={selectedIds.has(site.id)}
               onToggleSelect={toggleSelect}
+              isGuest={isGuest}
             />
           ))}
         </div>
@@ -458,6 +466,7 @@ function App() {
         totalSites={sites.length}
         onlineCount={sites.filter(s => s.latestCheck?.status === 'online').length}
         offlineCount={sites.filter(s => s.latestCheck?.status === 'offline').length}
+        isGuest={isGuest}
       />
 
       {/* Toplu əməliyyat paneli */}

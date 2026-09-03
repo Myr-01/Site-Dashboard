@@ -5,6 +5,41 @@ export interface CurrentUser {
   id: number | null;
   email: string | null;
   role: string;
+  guest_target?: number | null;
+}
+
+export interface GuestAccount {
+  id: number;
+  label: string;
+  is_admin: boolean;
+  site_count: number;
+}
+
+// Qonaq üçün hesab siyahısını al (public — auth tələb etmir)
+export async function fetchGuestAccounts(): Promise<GuestAccount[]> {
+  try {
+    const res = await fetch(apiUrl('/api/auth/accounts'));
+    if (!res.ok) return [];
+    return (await res.json()) as GuestAccount[];
+  } catch {
+    return [];
+  }
+}
+
+// Qonaq kimi giriş — seçilmiş hesabın saytlarını read-only görmək üçün token al
+export async function loginAsGuest(userId: number): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(apiUrl('/api/auth/guest'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_id: userId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok && data?.token) {
+    setAdminToken(data.token);
+    if (data.user) setCachedUser(data.user);
+    return { ok: true };
+  }
+  return { ok: false, error: data?.error || 'Qonaq girişi uğursuz oldu' };
 }
 
 // JWT sessiya token-ini sessionStorage-dan al (tab bağlanana qədər aktiv qalır)
