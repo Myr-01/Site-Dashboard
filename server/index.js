@@ -813,9 +813,15 @@ app.get('/api/export/csv', requireAuthFlexible, blockGuestWrite, async (req, res
       ]);
     }
 
-    const csv = rows
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    // Ayırıcı: nöqtəli vergül (;) — Azərbaycan/Avropa Excel lokalının default ayırıcısıdır.
+    // Vergül (,) istifadə etsək, həmin lokalda Excel bütün sətri tək xanaya yığır.
+    const DELIM = ';';
+    const body = rows
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(DELIM))
       .join('\r\n');
+
+    // "sep=;" sətri Excel-ə ayırıcını açıq şəkildə bildirir (lokaldan asılı olmayaraq düzgün açılır).
+    const csv = `sep=${DELIM}\r\n${body}`;
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="sites-export.csv"');
