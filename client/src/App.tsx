@@ -7,8 +7,10 @@ import AddSiteModal from './components/AddSiteModal';
 import FloatingToolbar from './components/FloatingToolbar';
 import WorldMap from './components/WorldMap';
 import AuthModal from './components/AuthModal';
+import AuthPage from './components/AuthPage';
+import PasscodeWidget from './components/PasscodeWidget';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { useAuth, authHeaders, getAdminToken } from './useAuth';
+import { useAuth, useAuthState, authHeaders, getAdminToken } from './useAuth';
 import { apiUrl } from './api';
 import { dialog } from './components/Dialog';
 
@@ -17,6 +19,7 @@ const SettingsModal = lazy(() => import('./components/SettingsModal'));
 const ImportModal = lazy(() => import('./components/ImportModal'));
 
 function App() {
+  const { user, checking, onLoggedIn, doLogout } = useAuthState();
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,7 +39,32 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { withAuth, showAuthModal, onAuthSuccess, onAuthClose } = useAuth();
 
+  const fetchSites = useCallback(async () => {
+    // Multi-user: GET /api/sites artıq auth tələb edir və yalnız cari user-in saytlarını qaytarır
+    if (!getAdminToken()) { setIsLoading(false); return; }
+    try {
+      const res = await fetch(apiUrl('/api/sites'), { headers: { ...authHeaders() } });
+      if (res.status === 401) {
+        // Token etibarsız — auth state onsuz da /auth/me ilə yoxlayacaq
+        setSites([]);
+        setFetchError(null);
+        return;
+      }
+      if (!res.ok) throw new Error(`Server xətası: ${res.status}`);
+      const data = await res.json();
+      setSites(data);
+      setFetchError(null);
+    } catch (err) {
+      console.error('Failed to fetch sites:', err);
+      setFetchError('Saytlar yüklənə bilmədi. Server ilə əlaqə yoxlayın.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
+    // Socket yalnız giriş edilmiş user üçün qurulsun
+    if (!user) return;
     // Backend URL: VITE_API_URL env var varsa onu istifadə et, yoxsa current origin
     const serverUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_SERVER_URL || window.location.origin;
     const s = io(serverUrl, { 
@@ -47,8 +75,10 @@ function App() {
     });
     setSocket(s);
 
-    s.on('sites-updated', (data: Site[]) => {
-      setSites(data);
+    // Multi-user: server artıq sayt datası broadcast etmir, yalnız "yenilə" siqnalı.
+    // Siqnal gələndə öz auth-lu datamızı çəkirik (yalnız bizim saytlar qayıdır).
+    s.on('sites-changed', () => {
+      fetchSites();
     });
 
     s.on('connect', () => setIsConnected(true));
@@ -62,7 +92,7 @@ function App() {
     return () => {
       s.disconnect();
     };
-  }, []);
+  }, [user, fetchSites]);
 
   useEffect(() => {
     if (searchQuery.trim() === '' && !activeGroup) {
@@ -79,24 +109,10 @@ function App() {
     }
   }, [searchQuery, sites, activeGroup]);
 
-  const fetchSites = useCallback(async () => {
-    try {
-      const res = await fetch(apiUrl('/api/sites'));
-      if (!res.ok) throw new Error(`Server xətası: ${res.status}`);
-      const data = await res.json();
-      setSites(data);
-      setFetchError(null);
-    } catch (err) {
-      console.error('Failed to fetch sites:', err);
-      setFetchError('Saytlar yüklənə bilmədi. Server ilə əlaqə yoxlayın.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchSites();
-  }, [fetchSites]);
+    // İlkin yüklənmə — yalnız giriş edilmişsə
+    if (user) fetchSites();
+  }, [user, fetchSites]);
 
   // `selectedSite` klik anında snapshot kimi saxlanılır — `sites` yeniləndikdə
   // (socket və ya fetch) onu da təzələ, əks halda modal köhnə dəyərləri göstərir
@@ -198,6 +214,22 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [withAuth, selectionMode, exitSelectionMode]);
 
+  // Auth yoxlaması davam edir — qısa yüklənmə ekranı
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <p className="text-text-muted">Yüklənir...</p>
+      </div>
+    );
+  }
+
+  // Giriş edilməyibsə — login/register səhifəsi (route guarding)
+  if (!user) {
+    return <AuthPage onAuthenticated={onLoggedIn} />;
+  }
+
+  const isAdmin = user.role === 'admin';
+
   return (
     <ErrorBoundary>
     <div className="min-h-screen bg-bg p-4 md:p-8">
@@ -216,6 +248,22 @@ function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Admin: canlı giriş kodu widget-i */}
+          {isAdmin && <PasscodeWidget />}
+
+          {/* Account menu */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-navy-surface border border-border rounded-lg">
+            <span className="text-text-muted text-xs max-w-[140px] truncate" title={user.email || undefined}>
+              {user.email || 'admin'}{isAdmin ? ' (admin)' : ''}
+            </span>
+            <button
+              onClick={doLogout}
+              className="text-text-muted hover:text-red-400 transition-colors text-xs border-l border-border pl-2"
+            >
+              Çıxış
+            </button>
+          </div>
+
           {/* CSV Export */}
           <button
             onClick={() => withAuth(handleCsvExport)}

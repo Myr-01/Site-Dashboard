@@ -13,8 +13,9 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { initDb, dbRun, dbGet, dbAll } from './db.js';
-import { isSafeFilename, createRequireAuth, verifyPassword, signAdminToken, isValidAdminToken, normalizeAlertDays } from './utils.js';
+import { initDb, backfillMultiUser, dbRun, dbGet, dbAll } from './db.js';
+import { getCurrentCode, verifyCode, isLockedOut, recordFailedAttempt, clearFailedAttempts } from './sensitiveCode.js';
+import { isSafeFilename, createRequireAuth, verifyPassword, hashPassword, signAdminToken, signUserToken, verifyToken, isValidAdminToken, normalizeAlertDays } from './utils.js';
 import { getAllSitesWithLatestCheck, startMonitoring } from './monitor.js';
 import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
@@ -157,14 +158,103 @@ import {
   is2FAEnabled 
 } from './totp.js';
 
-// Şifrəni yoxla — 2FA enabled-dirsə, token tələb et
+// Sadə email format yoxlaması
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+}
+
+// === QEYDİYYAT ===
+// Yeni istifadəçi qeydiyyatı — email + password. Uğurlu olduqda avtomatik login (JWT).
+app.post('/api/auth/register', authLimiter, async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Düzgün email ünvanı daxil edin' });
+    }
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Şifrə ən azı 8 simvol olmalıdır' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Unikallıq yoxlaması
+    const existing = await dbGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing) {
+      return res.status(409).json({ error: 'Bu email artıq qeydiyyatdan keçib' });
+    }
+
+    const passwordHash = await hashPassword(password);
+    // username köhnə schema-da NOT NULL/UNIQUE ola bilər — email-i username kimi də veririk
+    const result = await dbRun(
+      "INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, ?, 'user')",
+      [normalizedEmail, normalizedEmail, passwordHash]
+    );
+
+    const user = { id: result.lastID, email: normalizedEmail, role: 'user' };
+    const token = signUserToken(user, JWT_SECRET);
+    res.status(201).json({ success: true, token, user: { id: user.id, email: user.email, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === GİRİŞ ===
+// Email + password ilə giriş. Hər user-ə qarşı yoxlanılır (təkcə admin yox).
+app.post('/api/auth/login', authLimiter, async (req, res) => {
+  try {
+    const { email, password, totp_token } = req.body;
+
+    if (!isValidEmail(email) || typeof password !== 'string' || !password) {
+      return res.status(400).json({ error: 'Email və şifrə tələb olunur' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await dbGet(
+      'SELECT id, email, username, password_hash, role FROM users WHERE email = ?',
+      [normalizedEmail]
+    );
+
+    // Timing-safe olmasa da, mesajı ümumi saxlayırıq ki user enumeration olmasın
+    if (!user || !user.password_hash) {
+      return res.status(401).json({ error: 'Email və ya şifrə yanlışdır' });
+    }
+
+    const valid = await verifyPassword(password, user.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Email və ya şifrə yanlışdır' });
+    }
+
+    // 2FA (yalnız username-i olan admin user üçün konfiqurasiya olunub)
+    if (user.username) {
+      const needs2FA = await is2FAEnabled(user.username);
+      if (needs2FA) {
+        if (!totp_token) {
+          return res.json({ success: false, requires2FA: true });
+        }
+        const totpValid = await verify2FA(user.username, totp_token);
+        if (!totpValid) {
+          return res.status(401).json({ error: '2FA kod yanlışdır' });
+        }
+      }
+    }
+
+    const token = signUserToken(user, JWT_SECRET);
+    res.json({ success: true, token, user: { id: user.id, email: user.email, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === KÖHNƏ ADMIN GİRİŞİ (geriyə uyğunluq) ===
+// Yalnız password ilə admin girişi. Multi-user-ə keçidə qədər saxlanılır.
 app.post('/api/auth/verify', authLimiter, async (req, res) => {
   try {
     const { password, totp_token } = req.body;
     if (!ADMIN_PASSWORD_HASH) {
       return res.status(500).json({ error: 'Server konfiqurasiyası tamamlanmayıb (ADMIN_PASSWORD_HASH yoxdur)' });
     }
-    
+
     const valid = await verifyPassword(password, ADMIN_PASSWORD_HASH);
     if (!valid) {
       return res.status(401).json({ error: 'Şifrə yanlışdır' });
@@ -183,8 +273,11 @@ app.post('/api/auth/verify', authLimiter, async (req, res) => {
       }
     }
 
-    // Şifrə + 2FA (əgər enabled-dirsə) uğurlu
-    const token = signAdminToken(JWT_SECRET);
+    // Admin user-i tap və user token ver (user_id ilə)
+    const adminUser = await dbGet("SELECT id, email, role FROM users WHERE username = 'admin'");
+    const token = adminUser
+      ? signUserToken({ id: adminUser.id, email: adminUser.email, role: adminUser.role || 'admin' }, JWT_SECRET)
+      : signAdminToken(JWT_SECRET);
     res.json({ success: true, token });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -194,24 +287,101 @@ app.post('/api/auth/verify', authLimiter, async (req, res) => {
 // Admin əməliyyatları üçün middleware — JWT sessiya token-i yoxlanılır
 const requireAuth = createRequireAuth(JWT_SECRET);
 
+/**
+ * Həssas əməliyyatlar (sayt əlavə etmə, credential-lara baxış) üçün rotating passcode yoxlaması.
+ * Admin (role='admin') tam istisnadır — passcode tələb olunmur.
+ * Non-admin: `x-sensitive-code` header (və ya body.code) cari passcode ilə uyğun olmalıdır.
+ * requireAuth-dan SONRA istifadə edilməlidir (req.user lazımdır).
+ */
+async function requireSensitiveAccess(req, res, next) {
+  try {
+    if (req.user?.role === 'admin') return next();
+
+    const userId = req.user?.id ?? 'anon';
+    if (isLockedOut(userId)) {
+      return res.status(429).json({ error: 'Çox sayda yanlış kod. 10 dəqiqə sonra yenidən cəhd edin.' });
+    }
+
+    const candidate = req.headers['x-sensitive-code'] || req.body?.code || req.query?.code;
+    const ok = await verifyCode(candidate);
+    if (!ok) {
+      recordFailedAttempt(userId);
+      return res.status(403).json({ error: 'Giriş kodu yanlışdır', requiresCode: true });
+    }
+
+    clearFailedAttempts(userId);
+    next();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+// Cari istifadəçi məlumatı (JWT-dən)
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    if (req.user.id) {
+      const user = await dbGet('SELECT id, email, username, role, created_at FROM users WHERE id = ?', [req.user.id]);
+      if (user) {
+        return res.json({ id: user.id, email: user.email, username: user.username, role: user.role, created_at: user.created_at });
+      }
+    }
+    // Köhnə admin token (user_id yox)
+    res.json({ id: null, email: null, role: req.user.role || 'admin' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Logout — JWT stateless olduğu üçün server tərəfdə iş yoxdur; klient token-i silir.
+app.post('/api/auth/logout', (req, res) => {
+  res.json({ success: true });
+});
+
+// === ROTATING PASSCODE (admin-only) ===
+// Cari həssas-əməliyyat kodunu qaytar. Yalnız admin görə bilər.
+app.get('/api/admin/sensitive-code', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Yalnız admin üçün' });
+    }
+    const { code, generated_at, expires_at } = await getCurrentCode();
+    res.json({ code, generated_at, expires_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Opsional auth yoxlaması (401 qaytarmır) — cavabı admin/qonaq üçün fərqləndirmək lazım olanda
 const hasValidAdminToken = (req) => isValidAdminToken(req.headers['x-admin-token'], JWT_SECRET);
 
 /**
- * Sayt datası dəyişdikdən sonra bütün qoşulu klientlərə dərhal yayımla.
+ * Sayt datası dəyişdikdən sonra qoşulu klientlərə "yenilə" siqnalı göndər.
  *
- * Monitorinq dövrü də `sites-updated` yayımlayır, amma o, yalnız real yoxlama
- * olduqda (30 dəqiqəyə qədər gecikmə ilə) işə düşür. Baxım rejimi, interval,
- * qeydlər kimi əl ilə edilən dəyişikliklər dərhal görünməlidir — əks halda
- * dashboard-dakı kart köhnə qalır və istifadəçi səhifəni yeniləməyə məcbur olur.
+ * Multi-user: artıq bütün saytları broadcast ETMİRİK (data leak olardı).
+ * Sadəcə `sites-changed` siqnalı göndəririk — hər klient öz auth-lu
+ * `GET /api/sites` sorğusunu təkrar edib yalnız öz saytlarını alır.
  */
-async function emitSitesUpdated() {
+function emitSitesUpdated() {
   try {
-    const sites = await getAllSitesWithLatestCheck();
-    io.emit('sites-updated', sites);
+    io.emit('sites-changed');
   } catch (err) {
-    console.error('sites-updated yayımlanmadı:', err.message);
+    console.error('sites-changed yayımlanmadı:', err.message);
   }
+}
+
+/**
+ * Sayt-ın verilmiş user-ə aid olub-olmadığını yoxla.
+ * Admin (role='admin') istənilən sayta çıxış əldə edir.
+ * Sahibi başqasıdırsa null qaytarır (çağıran 404 verməlidir — mövcudluğu leak etməmək üçün).
+ * @returns {Promise<object|null>} sayt sətri (bütün sütunlar) və ya null
+ */
+async function getOwnedSite(siteId, user) {
+  const site = await dbGet('SELECT * FROM sites WHERE id = ?', [siteId]);
+  if (!site) return null;
+  if (user?.role === 'admin') return site;
+  if (site.user_id != null && site.user_id === user?.id) return site;
+  // Sahibsiz (köhnə) saytlar yalnız admin üçün — normal user görməməlidir
+  return null;
 }
 
 // Fayl endirmə endpoint-ləri üçün: brauzerin `window.open`-i custom header göndərə bilmir,
@@ -220,30 +390,41 @@ async function emitSitesUpdated() {
 // adətən qəbul edilən bir tradeoff-dur, amma header variantı üstünlük təşkil edir.
 function requireAuthFlexible(req, res, next) {
   const token = req.headers['x-admin-token'] || req.query.token;
-  if (isValidAdminToken(token, JWT_SECRET)) return next();
-  res.status(401).json({ error: 'İcazə yoxdur və ya sessiya bitib' });
+  const payload = verifyToken(token, JWT_SECRET);
+  if (!payload) {
+    return res.status(401).json({ error: 'İcazə yoxdur və ya sessiya bitib' });
+  }
+  req.user = {
+    id: payload.user_id ?? null,
+    role: payload.role || 'user',
+    email: payload.email ?? null,
+  };
+  next();
 }
 
-// Get all sites with latest check
-app.get('/api/sites', async (req, res) => {
+// Get all sites with latest check — yalnız cari user-in saytları (admin hamısını görür)
+app.get('/api/sites', requireAuth, async (req, res) => {
   try {
-    const sites = await getAllSitesWithLatestCheck();
+    // Admin: bütün saytlar. Normal user: yalnız öz saytları.
+    const sites = req.user.role === 'admin'
+      ? await getAllSitesWithLatestCheck()
+      : await getAllSitesWithLatestCheck(req.user.id);
     res.json(sites);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Add a site
-app.post('/api/sites', requireAuth, async (req, res) => {
+// Add a site — sahibi cari user olur (rotating passcode yoxlaması aşağıda middleware ilə)
+app.post('/api/sites', requireAuth, requireSensitiveAccess, async (req, res) => {
   try {
     const { name, url, color_tag, alert_days } = req.body;
     if (!name || !url) {
       return res.status(400).json({ error: 'Name and URL are required' });
     }
     const result = await dbRun(
-      'INSERT INTO sites (name, url, color_tag, alert_days) VALUES (?, ?, ?, ?)',
-      [name, url, color_tag || null, normalizeAlertDays(alert_days)]
+      'INSERT INTO sites (name, url, color_tag, alert_days, user_id) VALUES (?, ?, ?, ?, ?)',
+      [name, url, color_tag || null, normalizeAlertDays(alert_days), req.user.id]
     );
     const site = await dbGet('SELECT * FROM sites WHERE id = ?', [result.lastID]);
     res.status(201).json(site);
@@ -253,10 +434,12 @@ app.post('/api/sites', requireAuth, async (req, res) => {
   }
 });
 
-// Delete a site
+// Delete a site — yalnız sahibi (və ya admin)
 app.delete('/api/sites/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     await dbRun('DELETE FROM checks WHERE site_id = ?', [id]);
     await dbRun('DELETE FROM sites WHERE id = ?', [id]);
     res.json({ success: true });
@@ -270,6 +453,8 @@ app.delete('/api/sites/:id', requireAuth, async (req, res) => {
 app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const { manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry } = req.body;
     await dbRun(
       'UPDATE sites SET manual_domain_registrar = ?, manual_domain_expiry = ?, manual_hosting_expiry = ? WHERE id = ?',
@@ -286,9 +471,10 @@ app.post('/api/sites/:id/manual-dates', requireAuth, async (req, res) => {
 app.patch('/api/sites/:id/maintenance', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const { maintenance_mode } = req.body;
-    const result = await dbRun('UPDATE sites SET maintenance_mode = ? WHERE id = ?', [maintenance_mode ? 1 : 0, id]);
-    if (result.changes === 0) return res.status(404).json({ error: 'Sayt tapılmadı' });
+    await dbRun('UPDATE sites SET maintenance_mode = ? WHERE id = ?', [maintenance_mode ? 1 : 0, id]);
     res.json({ success: true, maintenance_mode: !!maintenance_mode });
     emitSitesUpdated();
   } catch (err) {
@@ -300,12 +486,13 @@ app.patch('/api/sites/:id/maintenance', requireAuth, async (req, res) => {
 app.patch('/api/sites/:id/interval', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const minutes = Number(req.body.check_interval_minutes);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
       return res.status(400).json({ error: 'İnterval 1 ilə 1440 dəqiqə arasında tam ədəd olmalıdır' });
     }
-    const result = await dbRun('UPDATE sites SET check_interval_minutes = ? WHERE id = ?', [minutes, id]);
-    if (result.changes === 0) return res.status(404).json({ error: 'Sayt tapılmadı' });
+    await dbRun('UPDATE sites SET check_interval_minutes = ? WHERE id = ?', [minutes, id]);
     res.json({ success: true, check_interval_minutes: minutes });
     emitSitesUpdated();
   } catch (err) {
@@ -313,37 +500,52 @@ app.patch('/api/sites/:id/interval', requireAuth, async (req, res) => {
   }
 });
 
-// Hadisə üçün postmortem qeydi
+// Hadisə üçün postmortem qeydi — incident-in aid olduğu sayt cari user-ə aid olmalıdır
 app.patch('/api/incidents/:id/note', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    // Incident-in sahibliyini yoxla (sites.user_id üzərindən)
+    const incident = await dbGet(
+      `SELECT i.id, s.user_id FROM incidents i JOIN sites s ON i.site_id = s.id WHERE i.id = ?`,
+      [id]
+    );
+    if (!incident) return res.status(404).json({ error: 'Hadisə tapılmadı' });
+    if (req.user.role !== 'admin' && incident.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Hadisə tapılmadı' });
+    }
     const { resolution_note } = req.body;
     const note = typeof resolution_note === 'string' && resolution_note.trim()
       ? resolution_note.trim().slice(0, 2000)
       : null;
-    const result = await dbRun('UPDATE incidents SET resolution_note = ? WHERE id = ?', [note, id]);
-    // Incident qeydi sayt kartında görünmür — yayım lazım deyil
-    if (result.changes === 0) return res.status(404).json({ error: 'Hadisə tapılmadı' });
+    await dbRun('UPDATE incidents SET resolution_note = ? WHERE id = ?', [note, id]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Göndərilmiş bildirişlərin tarixçəsi
-app.get('/api/notifications', async (req, res) => {
+// Göndərilmiş bildirişlərin tarixçəsi — yalnız cari user-in saytları (admin hamısını görür)
+app.get('/api/notifications', requireAuth, async (req, res) => {
   try {
     const { site_id } = req.query;
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const isAdmin = req.user.role === 'admin';
 
     let query = `SELECT nl.id, nl.site_id, nl.channel, nl.message, nl.sent_at, s.name AS site_name
                  FROM notification_log nl
-                 LEFT JOIN sites s ON nl.site_id = s.id`;
+                 JOIN sites s ON nl.site_id = s.id`;
     const params = [];
+    const where = [];
+
+    if (!isAdmin) {
+      where.push('s.user_id = ?');
+      params.push(req.user.id);
+    }
     if (site_id) {
-      query += ' WHERE nl.site_id = ?';
+      where.push('nl.site_id = ?');
       params.push(site_id);
     }
+    if (where.length) query += ' WHERE ' + where.join(' AND ');
     query += ' ORDER BY nl.sent_at DESC, nl.id DESC LIMIT ?';
     params.push(limit);
 
@@ -418,9 +620,11 @@ app.post('/api/push/test', requireAuth, async (req, res) => {
 
 // === TREND (uzunmüddətli aggregate statistika) ===
 
-app.get('/api/sites/:id/trend', async (req, res) => {
+app.get('/api/sites/:id/trend', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
     const stats = await dbAll(
       `SELECT date, avg_response_time, uptime_percent, total_checks
@@ -482,7 +686,10 @@ app.get('/api/public/status', async (req, res) => {
 // CSV export — fayl endirmə olduğuna görə token header-də və ya ?token= query-də
 app.get('/api/export/csv', requireAuthFlexible, async (req, res) => {
   try {
-    const sites = await dbAll('SELECT * FROM sites ORDER BY name');
+    const isAdmin = req.user.role === 'admin';
+    const sites = isAdmin
+      ? await dbAll('SELECT * FROM sites ORDER BY name')
+      : await dbAll('SELECT * FROM sites WHERE user_id = ? ORDER BY name', [req.user.id]);
     const rows = [['Ad', 'URL', 'Status', 'Uptime (30g)', 'SSL', 'Domain Bitmə', 'Hosting', 'Qrup', 'İnterval (dəq)']];
 
     for (const site of sites) {
@@ -523,12 +730,18 @@ app.get('/api/config/export', requireAuthFlexible, async (req, res) => {
   try {
     // DİQQƏT: giriş məlumatları (domain_username/password, hosting_username/password,
     // login URL-ləri) BİLƏRƏKDƏN daxil edilmir — bu fayl disk/email vasitəsilə paylaşıla bilər.
-    const sites = await dbAll(`
-      SELECT name, url, group_name, notes, color_tag, alert_days, check_interval_minutes,
-             manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry
-      FROM sites
-      ORDER BY name
-    `);
+    const isAdmin = req.user.role === 'admin';
+    const sites = isAdmin
+      ? await dbAll(`
+          SELECT name, url, group_name, notes, color_tag, alert_days, check_interval_minutes,
+                 manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry
+          FROM sites ORDER BY name
+        `)
+      : await dbAll(`
+          SELECT name, url, group_name, notes, color_tag, alert_days, check_interval_minutes,
+                 manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry
+          FROM sites WHERE user_id = ? ORDER BY name
+        `, [req.user.id]);
 
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="sites-config.json"');
@@ -549,8 +762,8 @@ app.post('/api/config/import', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Bir dəfədə maksimum 500 sayt import edilə bilər' });
     }
 
-    // Mövcud URL-ləri əvvəlcədən oxu — dublikat yaratmayaq
-    const existing = await dbAll('SELECT url FROM sites');
+    // Mövcud URL-ləri əvvəlcədən oxu (yalnız cari user-in) — dublikat yaratmayaq
+    const existing = await dbAll('SELECT url FROM sites WHERE user_id = ?', [req.user.id]);
     const existingUrls = new Set(existing.map(s => String(s.url).trim().toLowerCase()));
 
     let imported = 0;
@@ -567,8 +780,8 @@ app.post('/api/config/import', requireAuth, async (req, res) => {
       const interval = Number(site.check_interval_minutes);
       await dbRun(
         `INSERT INTO sites (name, url, group_name, notes, color_tag, alert_days, check_interval_minutes,
-         manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         manual_domain_expiry, manual_domain_registrar, manual_hosting_expiry, user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           name,
           url,
@@ -580,6 +793,7 @@ app.post('/api/config/import', requireAuth, async (req, res) => {
           site.manual_domain_expiry || null,
           site.manual_domain_registrar || null,
           site.manual_hosting_expiry || null,
+          req.user.id,
         ]
       );
       existingUrls.add(url.toLowerCase());
@@ -593,26 +807,29 @@ app.post('/api/config/import', requireAuth, async (req, res) => {
   }
 });
 
-// Get access credentials for a site (READ) — auth tələb edir
-app.get('/api/sites/:id/credentials', requireAuth, async (req, res) => {
+// Get access credentials for a site (READ) — həssas: ownership + rotating passcode (admin istisna)
+app.get('/api/sites/:id/credentials', requireAuth, requireSensitiveAccess, async (req, res) => {
   try {
     const { id } = req.params;
-    const site = await dbGet(
-      'SELECT domain_username, domain_password, hosting_username, hosting_password FROM sites WHERE id = ?',
-      [id]
-    );
-    if (!site) return res.status(404).json({ error: 'Sayt tapılmadı' });
-    res.json(site);
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
+    res.json({
+      domain_username: owned.domain_username,
+      domain_password: owned.domain_password,
+      hosting_username: owned.hosting_username,
+      hosting_password: owned.hosting_password,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Update access credentials for a site — auth SiteDetailModal tərəfindən edilir
+// Update access credentials for a site — ownership yoxlanılır
 app.post('/api/sites/:id/credentials', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Credentials POST for site', id);
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const {
       domain_login_url, domain_username, domain_password,
       hosting_login_url, hosting_username, hosting_password,
@@ -639,10 +856,12 @@ app.post('/api/sites/:id/credentials', requireAuth, async (req, res) => {
   }
 });
 
-// Get check history for a site
-app.get('/api/sites/:id/history', async (req, res) => {
+// Get check history for a site — ownership yoxlanılır
+app.get('/api/sites/:id/history', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const history = await dbAll(
       'SELECT * FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT 50',
       [id]
@@ -653,10 +872,12 @@ app.get('/api/sites/:id/history', async (req, res) => {
   }
 });
 
-// Incident log for a site
-app.get('/api/sites/:id/incidents', async (req, res) => {
+// Incident log for a site — ownership yoxlanılır
+app.get('/api/sites/:id/incidents', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const incidents = await dbAll(
       'SELECT * FROM incidents WHERE site_id = ? ORDER BY started_at DESC LIMIT 50',
       [id]
@@ -667,10 +888,12 @@ app.get('/api/sites/:id/incidents', async (req, res) => {
   }
 });
 
-// Update site notes and group
+// Update site notes and group — ownership yoxlanılır
 app.post('/api/sites/:id/meta', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const { notes, group_name, color_tag, alert_days } = req.body;
     await dbRun(
       'UPDATE sites SET notes = ?, group_name = ?, color_tag = ?, alert_days = ? WHERE id = ?',
@@ -683,10 +906,12 @@ app.post('/api/sites/:id/meta', requireAuth, async (req, res) => {
   }
 });
 
-// Monthly uptime report for a site
-app.get('/api/sites/:id/report', async (req, res) => {
+// Monthly uptime report for a site — ownership yoxlanılır
+app.get('/api/sites/:id/report', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
+    const owned = await getOwnedSite(id, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     const { month } = req.query; // format: YYYY-MM
 
     const start = month ? `${month}-01` : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -731,7 +956,7 @@ app.get('/api/sites/:id/report', async (req, res) => {
 app.get('/api/sites/:id/report/pdf', requireAuthFlexible, async (req, res) => {
   try {
     const { id } = req.params;
-    const site = await dbGet('SELECT * FROM sites WHERE id = ?', [id]);
+    const site = await getOwnedSite(id, req.user);
     if (!site) return res.status(404).json({ error: 'Sayt tapılmadı' });
 
     const checks = await dbAll(
@@ -778,7 +1003,7 @@ app.post('/api/import', requireAuth, upload.single('file'), async (req, res) => 
         const name = record.name || record.Name;
         const url = record.url || record.URL || record.Url;
         if (name && url) {
-          await dbRun('INSERT INTO sites (name, url) VALUES (?, ?)', [name, url]);
+          await dbRun('INSERT INTO sites (name, url, user_id) VALUES (?, ?, ?)', [name, url, req.user.id]);
           success++;
         } else {
           errors++;
@@ -962,9 +1187,10 @@ app.get('/api/settings/webhooks', async (req, res) => {
   }
 });
 
-// Get all site locations for map
-app.get('/api/sites/locations', async (req, res) => {
+// Get all site locations for map — yalnız cari user-in saytları (admin hamısını görür)
+app.get('/api/sites/locations', requireAuth, async (req, res) => {
   try {
+    const isAdmin = req.user.role === 'admin';
     const locations = await dbAll(`
       SELECT 
         s.id, s.name, s.url,
@@ -975,18 +1201,21 @@ app.get('/api/sites/locations', async (req, res) => {
         AND c.id = (SELECT id FROM checks WHERE site_id = s.id ORDER BY checked_at DESC LIMIT 1)
       LEFT JOIN site_locations l ON s.id = l.site_id
       WHERE l.latitude IS NOT NULL AND l.longitude IS NOT NULL
-    `);
+      ${isAdmin ? '' : 'AND s.user_id = ?'}
+    `, isAdmin ? [] : [req.user.id]);
     res.json(locations);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Multi-region check results for a site
-app.get('/api/sites/:id/region-checks', async (req, res) => {
+// Multi-region check results for a site — ownership yoxlanılır
+app.get('/api/sites/:id/region-checks', requireAuth, async (req, res) => {
   try {
     const siteId = parseInt(req.params.id, 10);
-    
+    const owned = await getOwnedSite(siteId, req.user);
+    if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
+
     // Son 24 saatın region check-lərini götür
     const checks = await dbAll(
       `SELECT region, status, http_code, response_time, error, checked_at 
@@ -1039,18 +1268,27 @@ app.post('/api/settings/escalation', requireAuth, async (req, res) => {
   }
 });
 
-// Get alert escalation history
+// Get alert escalation history — yalnız cari user-in saytları (admin hamısını görür)
 app.get('/api/escalations', requireAuth, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit, 10) || 50;
-    const escalations = await dbAll(
-      `SELECT e.*, s.name as site_name, s.url 
-       FROM alert_escalations e
-       JOIN sites s ON e.site_id = s.id
-       ORDER BY e.sent_at DESC
-       LIMIT ?`,
-      [limit]
-    );
+    const isAdmin = req.user.role === 'admin';
+    const escalations = isAdmin
+      ? await dbAll(
+          `SELECT e.*, s.name as site_name, s.url
+           FROM alert_escalations e
+           JOIN sites s ON e.site_id = s.id
+           ORDER BY e.sent_at DESC LIMIT ?`,
+          [limit]
+        )
+      : await dbAll(
+          `SELECT e.*, s.name as site_name, s.url
+           FROM alert_escalations e
+           JOIN sites s ON e.site_id = s.id
+           WHERE s.user_id = ?
+           ORDER BY e.sent_at DESC LIMIT ?`,
+          [req.user.id, limit]
+        );
     res.json(escalations);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1673,15 +1911,12 @@ function formatFileSize(bytes) {
 }
 
 // Socket.io connection
-io.on('connection', async (socket) => {
+// Multi-user: socket üzərindən sayt datası GÖNDƏRMİRİK (data leak olardı, socket auth-suzdur).
+// Socket yalnız "sites-changed" siqnalı daşıyır; klient auth-lu GET /api/sites ilə öz datasını alır.
+io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
-  // Send current data immediately on connect
-  try {
-    const sites = await getAllSitesWithLatestCheck();
-    socket.emit('sites-updated', sites);
-  } catch (err) {
-    console.error('Failed to send initial data:', err.message);
-  }
+  // Qoşulan klientə dərhal bir dəfə "yenilə" siqnalı ver ki, ilkin datanı çəksin
+  socket.emit('sites-changed');
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
@@ -1709,7 +1944,19 @@ const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // Initialize DB then start server
-initDb().then(() => {
+initDb().then(async () => {
+  // Multi-user backfill migration (idempotent)
+  try {
+    const { adminId, backfilledSites } = await backfillMultiUser();
+    if (adminId) {
+      console.log(`Multi-user backfill: admin user id=${adminId}, ${backfilledSites} sayt admin-ə bağlandı`);
+    } else {
+      console.warn('Multi-user backfill: admin user yaradılmadı (ADMIN_EMAIL/ADMIN_PASSWORD_HASH yoxdur?)');
+    }
+  } catch (err) {
+    console.error('Multi-user backfill xətası:', err.message);
+  }
+
   httpServer.listen(PORT, HOST, () => {
     console.log(`Server running on http://${HOST}:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);

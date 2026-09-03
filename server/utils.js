@@ -35,7 +35,23 @@ export function isSafeFilename(name) {
 }
 
 /**
- * Admin sessiya JWT-si yarat.
+ * İstifadəçi sessiya JWT-si yarat. Payload user identity daşıyır.
+ * @param {{id: number, role?: string, email?: string}} user
+ * @param {string} jwtSecret
+ * @param {string} [expiresIn]
+ * @returns {string}
+ */
+export function signUserToken(user, jwtSecret, expiresIn = '7d') {
+  return jwt.sign(
+    { user_id: user.id, role: user.role || 'user', email: user.email || null },
+    jwtSecret,
+    { expiresIn }
+  );
+}
+
+/**
+ * Geriyə uyğunluq üçün — köhnə admin token (payload {role:'admin'}, user_id yox).
+ * Yeni kodda signUserToken istifadə et.
  * @param {string} jwtSecret
  * @param {string} [expiresIn]
  * @returns {string}
@@ -45,36 +61,50 @@ export function signAdminToken(jwtSecret, expiresIn = '7d') {
 }
 
 /**
- * Token-in etibarlı admin JWT-si olub-olmadığını yoxla (throw etmir).
+ * Token-in etibarlılığını yoxla və decode edilmiş payload-u qaytar (throw etmir).
+ * @param {string|undefined} token
+ * @param {string} jwtSecret
+ * @returns {object|null} decode edilmiş payload və ya null
+ */
+export function verifyToken(token, jwtSecret) {
+  if (!token) return null;
+  try {
+    return jwt.verify(token, jwtSecret);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Token-in etibarlı JWT olub-olmadığını yoxla (throw etmir).
  * @param {string|undefined} token
  * @param {string} jwtSecret
  * @returns {boolean}
  */
 export function isValidAdminToken(token, jwtSecret) {
-  if (!token) return false;
-  try {
-    jwt.verify(token, jwtSecret);
-    return true;
-  } catch {
-    return false;
-  }
+  return verifyToken(token, jwtSecret) !== null;
 }
 
 /**
- * Admin auth middleware factory — JWT sessiya token-i yoxlayır.
- * Token `x-admin-token` header-ində gözlənilir.
+ * Auth middleware factory — JWT sessiya token-i yoxlayır və `req.user`-i doldurur.
+ * Token `x-admin-token` header-ində gözlənilir (geriyə uyğunluq üçün ad saxlanılır).
+ * `req.user = { id, role, email }`. Köhnə admin token-lərində user_id olmadığı üçün
+ * id null, role 'admin' olur — belə token-lər hələ də admin kimi qəbul edilir.
  * @param {string} jwtSecret
  */
 export function createRequireAuth(jwtSecret) {
   return function requireAuth(req, res, next) {
     const token = req.headers['x-admin-token'];
-    if (!token) return res.status(401).json({ error: 'İcazə yoxdur' });
-    try {
-      jwt.verify(token, jwtSecret);
-      next();
-    } catch {
-      res.status(401).json({ error: 'İcazə yoxdur və ya sessiya bitib' });
+    const payload = verifyToken(token, jwtSecret);
+    if (!payload) {
+      return res.status(401).json({ error: 'İcazə yoxdur və ya sessiya bitib' });
     }
+    req.user = {
+      id: payload.user_id ?? null,
+      role: payload.role || 'user',
+      email: payload.email ?? null,
+    };
+    next();
   };
 }
 

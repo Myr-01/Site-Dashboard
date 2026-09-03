@@ -7,6 +7,10 @@ interface AuthModalProps {
   onClose: () => void;
 }
 
+/**
+ * KÖHNƏ admin şifrə modal-ı — protected action-lar üçün (yalnız şifrə).
+ * Multi-user login/register üçün AuthPage komponenti istifadə olunur.
+ */
 export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -20,7 +24,6 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
-  // Block body scroll when modal is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -39,7 +42,6 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
     setLoading(true);
     setError('');
     try {
-      // Uğurlu olduqda JWT token session-da saxlanılır (şifrənin özü yox)
       const ok = await loginWithPassword(password);
       if (ok) {
         setIsClosing(true);
@@ -75,7 +77,6 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
         }`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Icon */}
         <div className="flex justify-center mb-4">
           <div className="w-12 h-12 bg-accent/10 border border-accent/20 rounded-xl flex items-center justify-center">
             <svg className="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">

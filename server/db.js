@@ -183,6 +183,9 @@ export async function initDb() {
   try { await dbExec(`ALTER TABLE sites ADD COLUMN alert_days TEXT DEFAULT '3,1'`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN maintenance_mode INTEGER DEFAULT 0`); } catch {}
   try { await dbExec(`ALTER TABLE sites ADD COLUMN check_interval_minutes INTEGER DEFAULT 30`); } catch {}
+  // Multi-user: hər sayt bir user-ə aiddir. Əvvəlcə nullable — backfill sonra edilir.
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_sites_user_id ON sites(user_id)`);
 
   // Brauzer push bildirişi abunəlikləri
   await dbExec(`
@@ -282,28 +285,35 @@ export async function initDb() {
   // Escalation contacts konfiqurasiyası (settings cədvəlində JSON olaraq saxlanacaq)
   // Format: { primary: "email@example.com", secondary: "oncall@example.com", escalation_delay_minutes: 5 }
 
-  // 2FA (TOTP) — admin user üçün
+  // Users — multi-user auth. username saxlanılır (2FA geriyə uyğunluq üçün),
+  // email login identifikatorudur, role 'user'/'admin'.
   await dbExec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
+      username TEXT UNIQUE,
+      email TEXT UNIQUE,
       password_hash TEXT NOT NULL,
+      role TEXT DEFAULT 'user',
       totp_secret TEXT,
       totp_enabled INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
   `);
+  // Migration: köhnə users cədvəlinə email və role sütunları əlavə et
+  try { await dbExec(`ALTER TABLE users ADD COLUMN email TEXT`); } catch {}
+  try { await dbExec(`ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'`); } catch {}
+  // email üçün unikallıq indeksi (NULL-lara icazə verir — köhnə username-only sətirlər üçün)
+  try { await dbExec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL`); } catch {}
 
-  // Migration: mövcud admin credentials-i users cədvəlinə köçür (əgər varsa)
-  try {
-    const adminHash = process.env.ADMIN_PASSWORD_HASH;
-    if (adminHash) {
-      await dbRun(
-        `INSERT OR IGNORE INTO users (username, password_hash) VALUES ('admin', ?)`,
-        [adminHash]
-      );
-    }
-  } catch {}
+  // Rotating passcode — həssas əməliyyatlar (sayt əlavə etmə, credential-lara baxış) üçün.
+  // Tək sətir saxlanılır (id=1), 12 saatda regenerate olunur.
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS sensitive_action_code (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      code TEXT NOT NULL,
+      generated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 
   // API keys — Public REST API üçün
   await dbExec(`
@@ -319,6 +329,68 @@ export async function initDb() {
     );
   `);
   await dbExec(`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)`);
+}
+
+/**
+ * Multi-user backfill migration — idempotent, hər başlanğıcda təhlükəsiz işləyir.
+ * 1. Admin user-i yaradır/yeniləyir (ADMIN_EMAIL + ADMIN_PASSWORD_HASH env-dən).
+ * 2. Köhnə username='admin' sətrini email/role ilə tamamlayır.
+ * 3. user_id-si olmayan mövcud saytları admin-ə bağlayır.
+ * @returns {Promise<{adminId: number|null, backfilledSites: number}>}
+ */
+export async function backfillMultiUser() {
+  const adminEmail = process.env.ADMIN_EMAIL || null;
+  const adminHash = process.env.ADMIN_PASSWORD_HASH || null;
+
+  let adminId = null;
+
+  // 1. Köhnə username='admin' user-i varsa, onu admin roluna yüksəlt və email təyin et
+  const existingAdmin = await dbGet(`SELECT id, email, role FROM users WHERE username = 'admin'`);
+  if (existingAdmin) {
+    adminId = existingAdmin.id;
+    // Email boşdursa və env-də varsa təyin et; rolu admin et
+    if (adminEmail && !existingAdmin.email) {
+      // Email başqa user tərəfindən tutulmayıbsa təyin et
+      const emailTaken = await dbGet(`SELECT id FROM users WHERE email = ? AND id != ?`, [adminEmail, adminId]);
+      if (!emailTaken) {
+        await dbRun(`UPDATE users SET email = ?, role = 'admin' WHERE id = ?`, [adminEmail, adminId]);
+      } else {
+        await dbRun(`UPDATE users SET role = 'admin' WHERE id = ?`, [adminId]);
+      }
+    } else {
+      await dbRun(`UPDATE users SET role = 'admin' WHERE id = ?`, [adminId]);
+    }
+  } else if (adminEmail && adminHash) {
+    // 2. Köhnə admin yoxdursa, env-dən yeni admin yarat (idempotent)
+    const byEmail = await dbGet(`SELECT id FROM users WHERE email = ?`, [adminEmail]);
+    if (byEmail) {
+      adminId = byEmail.id;
+      await dbRun(`UPDATE users SET role = 'admin' WHERE id = ?`, [adminId]);
+    } else {
+      const result = await dbRun(
+        `INSERT INTO users (username, email, password_hash, role) VALUES ('admin', ?, ?, 'admin')`,
+        [adminEmail, adminHash]
+      );
+      adminId = result.lastID;
+    }
+  } else if (adminHash) {
+    // 3. Yalnız hash varsa (köhnə setup, email yoxdur) — username='admin' ilə yarat
+    const result = await dbRun(
+      `INSERT OR IGNORE INTO users (username, password_hash, role) VALUES ('admin', ?, 'admin')`,
+      [adminHash]
+    );
+    const adminRow = await dbGet(`SELECT id FROM users WHERE username = 'admin'`);
+    adminId = adminRow ? adminRow.id : (result.lastID || null);
+  }
+
+  // 4. user_id-si olmayan saytları admin-ə bağla (backfill)
+  let backfilledSites = 0;
+  if (adminId) {
+    const result = await dbRun(`UPDATE sites SET user_id = ? WHERE user_id IS NULL`, [adminId]);
+    backfilledSites = result.changes || 0;
+  }
+
+  return { adminId, backfilledSites };
 }
 
 export default db;

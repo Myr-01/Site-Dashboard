@@ -490,22 +490,35 @@ export async function runChecks(io) {
   }
 
   // Yalnız real yoxlama olduqda yayımla — tick hər dəqiqə işlədiyi üçün
-  // heç nə dəyişməyəndə lüzumsuz sorğu və trafik yaratmayaq
+  // heç nə dəyişməyəndə lüzumsuz sorğu və trafik yaratmayaq.
+  // Multi-user: bütün saytları broadcast etmirik (data leak) — sadəcə "yenilə" siqnalı.
   if (io && checkedCount > 0) {
-    const updatedSites = await getAllSitesWithLatestCheck();
-    io.emit('sites-updated', updatedSites);
+    io.emit('sites-changed');
   }
 }
 
-export async function getAllSitesWithLatestCheck() {
+/**
+ * Saytları son yoxlama və uptime ilə qaytar.
+ * @param {number|null} [userId] - Verilibsə, yalnız həmin user-in saytları qaytarılır.
+ *   null/undefined → bütün saytlar (daxili monitorinq loop-u üçün).
+ */
+export async function getAllSitesWithLatestCheck(userId = null) {
   // Həssas sahələri (username/password) çıxarırıq — yalnız auth ilə ayrı endpoint-dən əldə edilə bilər
-  const sites = await dbAll(`
-    SELECT id, name, url, group_name, notes, created_at, color_tag, alert_days,
-           maintenance_mode, check_interval_minutes,
-           manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry,
-           domain_login_url, hosting_login_url
-    FROM sites
-  `);
+  const sites = userId != null
+    ? await dbAll(`
+        SELECT id, name, url, group_name, notes, created_at, color_tag, alert_days,
+               maintenance_mode, check_interval_minutes,
+               manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry,
+               domain_login_url, hosting_login_url
+        FROM sites WHERE user_id = ?
+      `, [userId])
+    : await dbAll(`
+        SELECT id, name, url, group_name, notes, created_at, color_tag, alert_days,
+               maintenance_mode, check_interval_minutes,
+               manual_domain_registrar, manual_domain_expiry, manual_hosting_expiry,
+               domain_login_url, hosting_login_url
+        FROM sites
+      `);
 
   const results = [];
   for (const site of sites) {

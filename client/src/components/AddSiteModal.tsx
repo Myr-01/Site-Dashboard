@@ -1,7 +1,8 @@
 ﻿import { useState, useEffect } from 'react';
 import { authHeaders } from '../useAuth';
-import { apiUrl } from '../api';
+import { apiUrl, sensitiveHeaders, clearSensitiveCode } from '../api';
 import { COLOR_TAGS } from '../colorTags';
+import PasscodeModal from './PasscodeModal';
 
 interface AddSiteModalProps {
   onClose: () => void;
@@ -15,6 +16,7 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
   const [alertDays, setAlertDays] = useState('3,1');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPasscode, setShowPasscode] = useState(false);
 
   // Block body scroll when modal is open
   useEffect(() => {
@@ -24,19 +26,24 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
     };
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitSite = async () => {
     setLoading(true);
     setError('');
-
     try {
       const res = await fetch(apiUrl('/api/sites'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(), ...sensitiveHeaders() },
         body: JSON.stringify({ name, url, color_tag: colorTag, alert_days: alertDays }),
       });
 
       const text = await res.text();
+      if (res.status === 403) {
+        // Rotating passcode tələb olunur (non-admin) və ya yanlışdır
+        clearSensitiveCode();
+        setShowPasscode(true);
+        setLoading(false);
+        return;
+      }
       if (!res.ok) {
         let errorMsg = 'Failed to add site';
         try {
@@ -54,6 +61,21 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
       setLoading(false);
     }
   };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitSite();
+  };
+
+  if (showPasscode) {
+    return (
+      <PasscodeModal
+        title="Sayt əlavə etmək üçün adminin verdiyi giriş kodu tələb olunur"
+        onClose={() => setShowPasscode(false)}
+        onSuccess={() => { setShowPasscode(false); submitSite(); }}
+      />
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
