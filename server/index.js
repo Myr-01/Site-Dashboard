@@ -221,6 +221,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 
     const user = { id: result.lastID, email: normalizedEmail, role: 'user' };
     const token = signUserToken(user, JWT_SECRET);
+    logActivity('register', `Yeni istifadəçi qeydiyyatdan keçdi: ${normalizedEmail}`);
     res.status(201).json({ success: true, token, user: { id: user.id, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -273,6 +274,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     }
 
     const token = signUserToken(user, JWT_SECRET);
+    logActivity('login', `Giriş: ${user.email}${user.role === 'admin' ? ' (admin)' : ''}`);
     res.json({ success: true, token, user: { id: user.id, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -382,6 +384,24 @@ function requireAdmin(req, res, next) {
 }
 
 /**
+ * Activity log-a hadisə yaz (admin dashboard "Son Əməliyyatlar" feed üçün).
+ * Fire-and-forget — səhv olsa əsas axını bloklamır. Son ~50 qeyd saxlanılır.
+ * @param {string} type - login | register | site_created | site_deleted | code_regenerated | user_disabled | user_deleted
+ * @param {string} message - insan-oxunaqlı mətn
+ */
+async function logActivity(type, message) {
+  try {
+    await dbRun('INSERT INTO activity_log (type, message) VALUES (?, ?)', [type, message]);
+    // Köhnələri təmizlə — yalnız son 50 qalsın
+    await dbRun(
+      `DELETE FROM activity_log WHERE id NOT IN (SELECT id FROM activity_log ORDER BY id DESC LIMIT 50)`
+    );
+  } catch (err) {
+    console.error('Activity log failed:', err.message);
+  }
+}
+
+/**
  * Həssas əməliyyatlar (sayt əlavə etmə, credential-lara baxış) üçün rotating passcode yoxlaması.
  * Admin (role='admin') tam istisnadır — passcode tələb olunmur.
  * Non-admin: `x-sensitive-code` header (və ya body.code) cari passcode ilə uyğun olmalıdır.
@@ -453,6 +473,7 @@ app.get('/api/admin/sensitive-code', requireAuth, async (req, res) => {
 app.post('/api/admin/sensitive-code/regenerate', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { code, generated_at, expires_at } = await regenerateCode();
+    logActivity('code_regenerated', 'Giriş kodu yeniləndi');
     res.json({ code, generated_at, expires_at });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -509,7 +530,7 @@ app.patch('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req,
     const userId = parseInt(req.params.id, 10);
     const disabled = req.body?.disabled ? 1 : 0;
 
-    const target = await dbGet('SELECT id, role FROM users WHERE id = ?', [userId]);
+    const target = await dbGet('SELECT id, role, email FROM users WHERE id = ?', [userId]);
     if (!target) return res.status(404).json({ error: 'İstifadəçi tapılmadı' });
     // Admin özünü və ya digər admini deaktiv edə bilməz
     if (target.role === 'admin') {
@@ -517,6 +538,7 @@ app.patch('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req,
     }
 
     await dbRun('UPDATE users SET disabled = ? WHERE id = ?', [disabled, userId]);
+    logActivity('user_disabled', `İstifadəçi ${disabled ? 'deaktiv edildi' : 'aktivləşdirildi'}: ${target.email || 'user#' + userId}`);
     res.json({ success: true, disabled: !!disabled });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -527,7 +549,7 @@ app.patch('/api/admin/users/:id/disable', requireAuth, requireAdmin, async (req,
 app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    const target = await dbGet('SELECT id, role FROM users WHERE id = ?', [userId]);
+    const target = await dbGet('SELECT id, role, email FROM users WHERE id = ?', [userId]);
     if (!target) return res.status(404).json({ error: 'İstifadəçi tapılmadı' });
     if (target.role === 'admin') {
       return res.status(400).json({ error: 'Admin hesabı silinə bilməz' });
@@ -535,7 +557,22 @@ app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) =
     // Bu user-in saytları və onlara bağlı data (checks, incidents və s.) CASCADE ilə silinir
     await dbRun('DELETE FROM sites WHERE user_id = ?', [userId]);
     await dbRun('DELETE FROM users WHERE id = ?', [userId]);
+    logActivity('user_deleted', `İstifadəçi silindi: ${target.email || 'user#' + userId}`);
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Son əməliyyatlar feed (admin dashboard)
+app.get('/api/admin/activity', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 15, 1), 50);
+    const rows = await dbAll(
+      'SELECT id, type, message, created_at FROM activity_log ORDER BY id DESC LIMIT ?',
+      [limit]
+    );
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -747,6 +784,7 @@ app.post('/api/sites', requireAuth, blockGuestWrite, requireSensitiveAccess, asy
       [name, url, color_tag || null, normalizeAlertDays(alert_days), req.user.id]
     );
     const site = await dbGet('SELECT * FROM sites WHERE id = ?', [result.lastID]);
+    logActivity('site_created', `Sayt əlavə edildi: ${site.name}`);
     res.status(201).json(site);
     emitSitesUpdated();
   } catch (err) {
@@ -762,6 +800,7 @@ app.delete('/api/sites/:id', requireAuth, blockGuestWrite, async (req, res) => {
     if (!owned) return res.status(404).json({ error: 'Sayt tapılmadı' });
     await dbRun('DELETE FROM checks WHERE site_id = ?', [id]);
     await dbRun('DELETE FROM sites WHERE id = ?', [id]);
+    logActivity('site_deleted', `Sayt silindi: ${owned.name}`);
     res.json({ success: true });
     emitSitesUpdated();
   } catch (err) {

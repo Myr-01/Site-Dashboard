@@ -336,6 +336,17 @@ export async function initDb() {
     );
   `);
   await dbExec(`CREATE INDEX IF NOT EXISTS idx_api_keys_key ON api_keys(key)`);
+
+  // Activity log — admin dashboard "Son Əməliyyatlar" feed üçün (son hadisələr)
+  await dbExec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  await dbExec(`CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at)`);
 }
 
 /**

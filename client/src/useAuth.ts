@@ -186,10 +186,15 @@ async function adminGet<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface ActivityEvent {
+  id: number; type: string; message: string; created_at: string;
+}
+
 export const adminApi = {
   stats: () => adminGet<AdminStats>('/api/admin/stats'),
   users: () => adminGet<AdminUser[]>('/api/admin/users'),
   sites: () => adminGet<AdminSite[]>('/api/admin/sites'),
+  activity: () => adminGet<ActivityEvent[]>('/api/admin/activity'),
 
   async setUserDisabled(id: number, disabled: boolean) {
     const res = await fetch(apiUrl(`/api/admin/users/${id}/disable`), {
