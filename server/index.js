@@ -816,16 +816,16 @@ app.get('/api/export/csv', requireAuthFlexible, blockGuestWrite, async (req, res
     // Ayırıcı: nöqtəli vergül (;) — Azərbaycan/Avropa Excel lokalının default ayırıcısıdır.
     // Vergül (,) istifadə etsək, həmin lokalda Excel bütün sətri tək xanaya yığır.
     const DELIM = ';';
-    const body = rows
+    const csv = rows
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(DELIM))
       .join('\r\n');
 
-    // "sep=;" sətri Excel-ə ayırıcını açıq şəkildə bildirir (lokaldan asılı olmayaraq düzgün açılır).
-    const csv = `sep=${DELIM}\r\n${body}`;
-
+    // QEYD: "sep=;" sətri İSTİFADƏ EDİLMİR — o, UTF-8 BOM-un tanınmasına mane olur və
+    // Azərbaycan hərfləri (ə, ş, ç, ğ) korlanır. Bunun əvəzinə:
+    //   - UTF-8 BOM (\uFEFF) → Excel faylı UTF-8 kimi oxuyur (hərflər düzgün)
+    //   - ; ayırıcısı → AZ/Avropa lokalında Excel avtomatik tanıyır
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="sites-export.csv"');
-    // UTF-8 BOM — Excel-də Azərbaycan hərflərinin (ə, ı, ş, ğ) korlanmaması üçün
     res.send('\uFEFF' + csv);
   } catch (err) {
     res.status(500).json({ error: err.message });
