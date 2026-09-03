@@ -16,10 +16,50 @@ export default function StatsBar({ sites }: StatsBarProps) {
   const avgTime = sitesWithResponse > 0 ? Math.round(avgResponseTime / sitesWithResponse) : 0;
 
   const stats = [
-    { label: 'Total Sites', value: total, color: 'text-white' },
-    { label: 'Online', value: online, color: 'text-green-400' },
-    { label: 'Offline', value: offline, color: 'text-red-400' },
-    { label: 'Avg Response', value: `${avgTime}ms`, color: 'text-accent' },
+    {
+      label: 'Total Sites',
+      value: total,
+      valueColor: 'text-white',
+      topBorder: 'border-t-accent',
+      iconColor: 'text-accent',
+      iconBg: 'bg-accent/15',
+      iconBorder: 'border-accent/30',
+      glow: 'bg-accent',
+      iconPath: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18a15 15 0 010-18z',
+    },
+    {
+      label: 'Online',
+      value: online,
+      valueColor: 'text-green-400',
+      topBorder: 'border-t-green-400',
+      iconColor: 'text-green-400',
+      iconBg: 'bg-green-400/15',
+      iconBorder: 'border-green-400/30',
+      glow: 'bg-green-400',
+      iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+    },
+    {
+      label: 'Offline',
+      value: offline,
+      valueColor: offline > 0 ? 'text-red-400' : 'text-white',
+      topBorder: offline > 0 ? 'border-t-red-400' : 'border-t-border',
+      iconColor: offline > 0 ? 'text-red-400' : 'text-text-muted',
+      iconBg: offline > 0 ? 'bg-red-400/15' : 'bg-navy-light',
+      iconBorder: offline > 0 ? 'border-red-400/30' : 'border-border',
+      glow: 'bg-red-400',
+      iconPath: 'M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z',
+    },
+    {
+      label: 'Avg Response',
+      value: `${avgTime}ms`,
+      valueColor: 'text-accent',
+      topBorder: 'border-t-blue-400',
+      iconColor: 'text-blue-400',
+      iconBg: 'bg-blue-400/15',
+      iconBorder: 'border-blue-400/30',
+      glow: 'bg-blue-400',
+      iconPath: 'M13 10V3L4 14h7v7l9-11h-7z',
+    },
   ];
 
   return (
@@ -27,10 +67,21 @@ export default function StatsBar({ sites }: StatsBarProps) {
       {stats.map(stat => (
         <div
           key={stat.label}
-          className="bg-navy-surface border border-border rounded-xl p-4 text-center hover:border-accent/40 transition-colors duration-200"
+          className={`group relative bg-navy-surface border border-border border-t-2 ${stat.topBorder} rounded-2xl p-5 overflow-hidden hover:border-border/80 transition-colors`}
         >
-          <p className="text-text-muted text-xs uppercase tracking-wider mb-1">{stat.label}</p>
-          <p className={`text-2xl font-heading font-bold ${stat.color}`}>{stat.value}</p>
+          {/* Arxa fon glow */}
+          <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-10 ${stat.glow}`} />
+          <div className="relative flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-text-muted text-[11px] uppercase tracking-wider mb-1.5 truncate">{stat.label}</p>
+              <p className={`text-3xl font-heading font-bold leading-none ${stat.valueColor}`}>{stat.value}</p>
+            </div>
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${stat.iconBg} border ${stat.iconBorder} transition-transform group-hover:scale-105`}>
+              <svg className={`w-5 h-5 ${stat.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={stat.iconPath} />
+              </svg>
+            </div>
+          </div>
         </div>
       ))}
     </div>

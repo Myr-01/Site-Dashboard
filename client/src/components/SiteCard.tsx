@@ -54,8 +54,8 @@ export default function SiteCard({
 
   return (
     <div
-      className={`relative bg-navy-surface border rounded-xl p-5 transition-[border-color,box-shadow] duration-200 group ${
-        isGuest ? 'cursor-default' : 'cursor-pointer hover:shadow-lg hover:shadow-accent/5'
+      className={`relative bg-navy-surface border rounded-2xl p-5 transition-[border-color,box-shadow,transform] duration-200 group ${
+        isGuest ? 'cursor-default' : 'cursor-pointer hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-0.5'
       } ${
         isSelected ? 'border-accent' : 'border-border hover:border-accent/50'
       }`}
@@ -118,36 +118,35 @@ export default function SiteCard({
 
       {/* Metrics */}
       {check ? (
-        <div className="grid grid-cols-2 gap-2 text-sm">
+        <div className="mt-4 pt-4 border-t border-border/60 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           {!isGuest && (
-            <div>
+            <div className="flex items-center justify-between gap-2">
               <span className="text-text-muted text-xs">HTTP</span>
-              <p className="text-white font-medium">{check.http_code || '—'}</p>
+              <span className="text-white font-medium">{check.http_code || '—'}</span>
             </div>
           )}
-          <div>
+          <div className="flex items-center justify-between gap-2">
             <span className="text-text-muted text-xs">Response</span>
-            <p className="text-white font-medium">{check.response_time ? `${check.response_time}ms` : '—'}</p>
+            <span className="text-white font-medium">{check.response_time ? `${check.response_time}ms` : '—'}</span>
           </div>
-          <div>
+          <div className="flex items-center justify-between gap-2">
             <span className="text-text-muted text-xs">SSL</span>
-            <p className={`font-medium ${check.ssl_valid === 1 ? 'text-green-400' : check.ssl_valid === 0 ? 'text-red-400' : 'text-text-muted'}`}>
+            <span className={`font-medium text-xs ${check.ssl_valid === 1 ? 'text-green-400' : check.ssl_valid === 0 ? 'text-red-400' : 'text-text-muted'}`}>
               {check.ssl_valid === 1
                 ? `Valid (${check.ssl_days_remaining}d)`
                 : check.ssl_valid === 0
                 ? 'Invalid'
                 : 'N/A'}
-            </p>
+            </span>
           </div>
-          <div>
-            <span className="text-text-muted text-xs">Uptime (30d)</span>
-            <p className="text-white font-medium">{site.uptime !== null ? `${site.uptime}%` : '—'}</p>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-text-muted text-xs">Uptime</span>
+            <span className="text-white font-medium">{site.uptime !== null ? `${site.uptime}%` : '—'}</span>
           </div>
-          <div>
-            <span className="text-text-muted text-xs">Domain Expiry</span>
-            <p className={`font-medium text-xs ${
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-text-muted text-xs">Domain</span>
+            <span className={`font-medium text-xs ${
               (() => {
-                // Manual tarix varsa onu istifadə et, yoxdursa WHOIS-dən
                 const expiry = site.manual_domain_expiry || check.domain_expiry;
                 if (!expiry) return 'text-text-muted';
                 const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -158,29 +157,36 @@ export default function SiteCard({
                 const expiry = site.manual_domain_expiry || check.domain_expiry;
                 if (!expiry) return '—';
                 const days = Math.ceil((new Date(expiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-                return `${days} gün qalıb`;
+                return `${days} gün`;
               })()}
-            </p>
+            </span>
           </div>
           {!isGuest && (
-            <div>
+            <div className="flex items-center justify-between gap-2">
               <span className="text-text-muted text-xs">Hosting</span>
-              <p className="text-accent font-medium text-xs">{check.hosting_provider || '—'}</p>
+              <span className="text-accent font-medium text-xs truncate max-w-[90px]" title={check.hosting_provider || ''}>{check.hosting_provider || '—'}</span>
             </div>
           )}
           {!isGuest && (
-            <div>
-              <span className="text-text-muted text-xs">SEO Score</span>
-              <p className="text-accent font-medium">{seoScore}/5</p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-text-muted text-xs">SEO</span>
+              <span className="text-accent font-medium">{seoScore}/5</span>
             </div>
           )}
-          <div>
-            <span className="text-text-muted text-xs">Last Check</span>
-            <p className="text-white font-medium text-xs">{formatTime(check.checked_at)}</p>
+          {/* Last Check — tam en, ayrıca sətir */}
+          <div className="col-span-2 flex items-center justify-between gap-2 pt-2 mt-1 border-t border-border/40">
+            <span className="text-text-muted text-xs">Son yoxlama</span>
+            <span className="text-text-muted font-medium text-xs">{formatTime(check.checked_at)}</span>
           </div>
         </div>
       ) : (
-        <p className="text-text-muted text-sm">Waiting for first check...</p>
+        <div className="mt-4 pt-4 border-t border-border/60 flex items-center gap-2 text-text-muted text-sm">
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          İlk yoxlama gözlənilir...
+        </div>
       )}
     </div>
   );
