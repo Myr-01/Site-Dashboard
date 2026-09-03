@@ -78,7 +78,7 @@ function AdminDashboard() {
       iconBg: 'bg-accent/15',
       iconBorder: 'border-accent/30',
       glowBg: 'bg-accent',
-      iconPath: 'M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-3-6.87',
+      iconPath: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
     },
     {
       label: 'Saytlar',

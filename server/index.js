@@ -664,6 +664,22 @@ app.post('/api/admin/branding/favicon', requireAuth, requireAdmin, brandingUploa
   }
 });
 
+// Logo və ya favicon-u sil (default nişana qaytar) — admin-only
+app.delete('/api/admin/branding/:kind', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const kind = req.params.kind;
+    if (kind !== 'logo' && kind !== 'favicon') {
+      return res.status(400).json({ error: 'Yanlış tip' });
+    }
+    const current = await getBranding();
+    current[`${kind}_url`] = '';
+    await dbRun("INSERT OR REPLACE INTO settings (key, value) VALUES ('branding', ?)", [JSON.stringify(current)]);
+    res.json(current);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Opsional auth yoxlaması (401 qaytarmır) — cavabı admin/qonaq üçün fərqləndirmək lazım olanda
 const hasValidAdminToken = (req) => isValidAdminToken(req.headers['x-admin-token'], JWT_SECRET);
 

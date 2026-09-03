@@ -77,9 +77,17 @@ export default function AdminUsers() {
             <tbody>
               {users.map(u => {
                 const isAdmin = u.role === 'admin';
+                const initial = (u.email || u.username || '?').slice(0, 1).toUpperCase();
                 return (
-                  <tr key={u.id} className="border-b border-border/50 last:border-0">
-                    <td className="px-4 py-3 text-white">{u.email || u.username || '—'}</td>
+                  <tr key={u.id} className="border-b border-border/50 last:border-0 hover:bg-navy-light/40 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${isAdmin ? 'bg-accent/20 text-accent border border-accent/30' : 'bg-navy-light text-text-muted border border-border'}`}>
+                          {initial}
+                        </div>
+                        <span className="text-white">{u.email || u.username || '—'}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs ${isAdmin ? 'bg-accent/10 text-accent border border-accent/20' : 'bg-navy-light text-text-muted'}`}>
                         {isAdmin ? 'admin' : 'user'}

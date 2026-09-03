@@ -245,6 +245,15 @@ export const adminApi = {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
     return res.json();
   },
+
+  async removeBrandingImage(kind: 'logo' | 'favicon') {
+    const res = await fetch(apiUrl(`/api/admin/branding/${kind}`), {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  },
 };
 
 /**

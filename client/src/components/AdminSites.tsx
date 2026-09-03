@@ -49,21 +49,29 @@ export default function AdminSites() {
             <tbody>
               {filtered.map(s => {
                 const status = s.maintenance_mode ? 'baxımda' : (s.status || 'N/A');
-                const statusColor = status === 'online' ? 'text-green-400'
-                  : status === 'offline' ? 'text-red-400'
-                  : status === 'baxımda' ? 'text-blue-400' : 'text-text-muted';
+                const dotColor = status === 'online' ? 'bg-green-400'
+                  : status === 'offline' ? 'bg-red-400'
+                  : status === 'baxımda' ? 'bg-blue-400' : 'bg-text-muted';
+                const badgeColor = status === 'online' ? 'bg-green-400/10 text-green-400'
+                  : status === 'offline' ? 'bg-red-400/10 text-red-400'
+                  : status === 'baxımda' ? 'bg-blue-400/10 text-blue-400' : 'bg-navy-light text-text-muted';
                 return (
-                  <tr key={s.id} className="border-b border-border/50 last:border-0">
-                    <td className="px-4 py-3 text-white">{s.name}</td>
+                  <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-navy-light/40 transition-colors">
+                    <td className="px-4 py-3 text-white font-medium">{s.name}</td>
                     <td className="px-4 py-3 text-text-muted truncate max-w-[220px]">{s.url}</td>
                     <td className="px-4 py-3 text-text-muted">{s.owner_email || '—'}</td>
                     <td className="px-4 py-3 text-text-muted">{s.group_name || '—'}</td>
-                    <td className={`px-4 py-3 font-medium ${statusColor}`}>{status}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                        {status}
+                      </span>
+                    </td>
                   </tr>
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-text-muted">Nəticə tapılmadı</td></tr>
+                <tr><td colSpan={5} className="px-4 py-10 text-center text-text-muted">Nəticə tapılmadı</td></tr>
               )}
             </tbody>
           </table>
