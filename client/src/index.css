@@ -11,6 +11,23 @@
   --accent-color: #fca311;
 }
 
+/* Splash ekranı — yüklənmə xətti animasiyası */
+@keyframes splash-bar {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
+.animate-splash-bar {
+  animation: splash-bar 1.4s ease-in-out infinite;
+}
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-pulse-slow {
+  animation: pulse-slow 1.6s ease-in-out infinite;
+}
+
 body {
   margin: 0;
   padding: 0;

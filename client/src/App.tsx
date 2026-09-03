@@ -9,6 +9,7 @@ import WorldMap from './components/WorldMap';
 import AuthModal from './components/AuthModal';
 import AuthPage from './components/AuthPage';
 import PasscodeWidget from './components/PasscodeWidget';
+import SplashScreen from './components/SplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth, useAuthState, authHeaders, getAdminToken } from './useAuth';
 import { apiUrl } from './api';
@@ -24,6 +25,7 @@ function App() {
   const { user, checking, onLoggedIn, doLogout } = useAuthState();
   const { branding } = useBranding();
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const [sites, setSites] = useState<Site[]>([]);
   const [filteredSites, setFilteredSites] = useState<Site[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -217,6 +219,12 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [withAuth, selectionMode, exitSelectionMode, user]);
+
+  // Açılış splash ekranı — logo + ad, sonra fade-out.
+  // Splash arxa planda auth yoxlaması davam edərkən göstərilir.
+  if (showSplash) {
+    return <SplashScreen onDone={() => setShowSplash(false)} />;
+  }
 
   // Auth yoxlaması davam edir — qısa yüklənmə ekranı
   if (checking) {
