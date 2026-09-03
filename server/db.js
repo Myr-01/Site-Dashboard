@@ -186,6 +186,11 @@ export async function initDb() {
   // Multi-user: hər sayt bir user-ə aiddir. Əvvəlcə nullable — backfill sonra edilir.
   try { await dbExec(`ALTER TABLE sites ADD COLUMN user_id INTEGER REFERENCES users(id)`); } catch {}
   await dbExec(`CREATE INDEX IF NOT EXISTS idx_sites_user_id ON sites(user_id)`);
+  // Downtime false-positive fix: 2 ardıcıl uğursuz yoxlamadan sonra alert.
+  // consecutive_failures — ardıcıl uğursuz check sayı; down_alert_sent — down alert-in
+  // artıq göndərilib-göndərilmədiyi (təkrar alert-in qarşısını alır).
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN consecutive_failures INTEGER DEFAULT 0`); } catch {}
+  try { await dbExec(`ALTER TABLE sites ADD COLUMN down_alert_sent INTEGER DEFAULT 0`); } catch {}
 
   // Brauzer push bildirişi abunəlikləri
   await dbExec(`

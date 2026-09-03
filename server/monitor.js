@@ -5,7 +5,7 @@ import dns from 'dns/promises';
 import https from 'https';
 import { createRequire } from 'module';
 import { dbAll, dbGet, dbRun } from './db.js';
-import { sendDowntimeAlert } from './mailer.js';
+import { sendDowntimeAlert, sendRecoveryEmail } from './mailer.js';
 import { shouldRefreshCache, parseAlertDays } from './utils.js';
 import { sendPushNotification } from './push.js';
 
@@ -118,6 +118,52 @@ async function sendWebhookNotification(site, result) {
     }
   } catch (err) {
     console.error('Webhook notification failed:', err.message);
+  }
+}
+
+// Sayt bərpa olduqda "yenidən online" bildirişi (email + webhook + push)
+async function sendRecoveryNotification(site, result) {
+  try {
+    const message = `✅ **Sayt Yenidən Online**\n\n**Sayt:** ${site.name}\n**URL:** ${site.url}\n**Status:** Online\n**Vaxt:** ${new Date().toLocaleString()}`;
+    const sentChannels = [];
+
+    const row = await dbGet("SELECT value FROM settings WHERE key = 'webhooks'");
+    const webhooks = row ? JSON.parse(row.value) : null;
+
+    if (webhooks) {
+      if (webhooks.telegram_webhook) {
+        await axios.post(webhooks.telegram_webhook, { text: message, parse_mode: 'Markdown' }).catch(() => {});
+        sentChannels.push('telegram');
+      }
+      if (webhooks.discord_webhook) {
+        let content = message;
+        if (webhooks.discord_user_id?.trim()) content = `<@${webhooks.discord_user_id.trim()}> ${message}`;
+        await axios.post(webhooks.discord_webhook, { content, allowed_mentions: { parse: ['users'] } }).catch(() => {});
+        sentChannels.push('discord');
+      }
+      if (webhooks.slack_webhook) {
+        await axios.post(webhooks.slack_webhook, { text: message }).catch(() => {});
+        sentChannels.push('slack');
+      }
+    }
+
+    // Email — bərpa bildirişi
+    try {
+      await sendRecoveryEmail(site);
+    } catch { /* email opsional */ }
+
+    // Brauzer push
+    const pushed = await sendPushNotification(
+      `${site.name} — Yenidən Online`,
+      `Sayt bərpa oldu: ${site.url}`
+    );
+    if (pushed > 0) sentChannels.push('push');
+
+    if (sentChannels.length > 0) {
+      await logNotification(site.id, sentChannels.join('+'), message);
+    }
+  } catch (err) {
+    console.error('Recovery notification failed:', err.message);
   }
 }
 
@@ -384,14 +430,6 @@ async function checkSite(site) {
   return result;
 }
 
-async function getLastStatus(siteId) {
-  const row = await dbGet(
-    'SELECT status FROM checks WHERE site_id = ? ORDER BY checked_at DESC LIMIT 1',
-    [siteId]
-  );
-  return row ? row.status : null;
-}
-
 export async function runChecks(io) {
   const sites = await dbAll('SELECT * FROM sites');
   if (sites.length === 0) return;
@@ -411,16 +449,38 @@ export async function runChecks(io) {
     lastCheckedMap.set(site.id, Date.now());
     checkedCount++;
 
-    const previousStatus = await getLastStatus(site.id);
     const result = await checkSite(site);
+    const rawOffline = result.status === 'offline';
 
+    // === FALSE-POSITIVE FIX: 2 ardıcıl uğursuzluq tələb olunur ===
+    // consecutive_failures və down_alert_sent sites cədvəlində saxlanılır.
+    const prevFailures = site.consecutive_failures || 0;
+    const downAlertSent = !!site.down_alert_sent;
+
+    // Yeni ardıcıl uğursuzluq sayı
+    const newFailures = rawOffline ? prevFailures + 1 : 0;
+
+    // Təsdiqlənmiş status: yalnız 2+ ardıcıl uğursuzluqda "offline" sayılır.
+    // 1-ci uğursuzluqda sayt hələ "online" (izlənilir), UI-da down göstərilmir.
+    // Uğursuz olsa da alert getməyibsə (1-ci uğursuzluq), status online qalır;
+    // artıq offline elan olunubsa (down_alert_sent), offline qalır.
+    let confirmedStatus;
+    if (!rawOffline) {
+      confirmedStatus = 'online';
+    } else if (newFailures >= 2 || downAlertSent) {
+      confirmedStatus = 'offline';
+    } else {
+      confirmedStatus = 'online'; // 1-ci uğursuzluq — hələ izlənilir
+    }
+
+    // checks cədvəlinə TƏSDİQLƏNMİŞ status yazılır (UI badge bununla uyğun olur)
     await dbRun(
       `INSERT INTO checks (site_id, status, http_code, response_time, ssl_valid, ssl_days_remaining, ssl_expiry,
         seo_title, seo_title_value, seo_description, seo_description_value, seo_h1, seo_robots, seo_canonical,
         server_ip, hosting_provider, domain_expiry, domain_registrar, domain_days_remaining)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        result.site_id, result.status, result.http_code, result.response_time,
+        result.site_id, confirmedStatus, result.http_code, result.response_time,
         result.ssl_valid, result.ssl_days_remaining, result.ssl_expiry,
         result.seo_title, result.seo_title_value, result.seo_description,
         result.seo_description_value, result.seo_h1, result.seo_robots, result.seo_canonical,
@@ -429,28 +489,54 @@ export async function runChecks(io) {
       ]
     );
 
-    // Send alert if site went from online to offline
-    if (previousStatus === 'online' && result.status === 'offline') {
-      sendDowntimeAlert(site, result);
-      sendWebhookNotification(site, result);
-      // Incident başladı — qeyd et
-      await dbRun(
-        `INSERT INTO incidents (site_id, started_at, http_code) VALUES (?, datetime('now'), ?)`,
-        [site.id, result.http_code]
-      );
-    }
-
-    // Sayt yenidən online oldu — aktiv incident-i bağla
-    if (previousStatus === 'offline' && result.status === 'online') {
-      const openIncident = await dbGet(
-        `SELECT id, started_at FROM incidents WHERE site_id = ? AND resolved_at IS NULL ORDER BY started_at DESC LIMIT 1`,
-        [site.id]
-      );
-      if (openIncident) {
-        const durationSec = Math.round((Date.now() - new Date(openIncident.started_at + 'Z').getTime()) / 1000);
+    if (rawOffline) {
+      // Uğursuz yoxlama — sayğacı artır
+      if (newFailures >= 2 && !downAlertSent) {
+        // İkinci (və ya sonrakı) ardıcıl uğursuzluq VƏ hələ alert göndərilməyib → İNDİ alert göndər
+        sendDowntimeAlert(site, result);
+        sendWebhookNotification(site, result);
         await dbRun(
-          `UPDATE incidents SET resolved_at = datetime('now'), duration_seconds = ? WHERE id = ?`,
-          [durationSec, openIncident.id]
+          `INSERT INTO incidents (site_id, started_at, http_code) VALUES (?, datetime('now'), ?)`,
+          [site.id, result.http_code]
+        );
+        await dbRun(
+          `UPDATE sites SET consecutive_failures = ?, down_alert_sent = 1 WHERE id = ?`,
+          [newFailures, site.id]
+        );
+        console.log(`🔴 Down alert: ${site.name} (${newFailures} ardıcıl uğursuzluq)`);
+      } else {
+        // 1-ci uğursuzluq (izlənilir) və ya artıq offline elan olunub — sadəcə sayğacı yenilə
+        await dbRun(
+          `UPDATE sites SET consecutive_failures = ? WHERE id = ?`,
+          [newFailures, site.id]
+        );
+        if (newFailures === 1) {
+          console.log(`🟡 İzlənilir: ${site.name} (1-ci uğursuzluq, alert hələ göndərilmir)`);
+        }
+      }
+    } else {
+      // Uğurlu yoxlama — sayğacı sıfırla
+      if (downAlertSent) {
+        // Sayt bərpa oldu — recovery bildirişi göndər, incident-i bağla
+        sendRecoveryNotification(site, result);
+        const openIncident = await dbGet(
+          `SELECT id, started_at FROM incidents WHERE site_id = ? AND resolved_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+          [site.id]
+        );
+        if (openIncident) {
+          const durationSec = Math.round((Date.now() - new Date(openIncident.started_at + 'Z').getTime()) / 1000);
+          await dbRun(
+            `UPDATE incidents SET resolved_at = datetime('now'), duration_seconds = ? WHERE id = ?`,
+            [durationSec, openIncident.id]
+          );
+        }
+        console.log(`🟢 Bərpa oldu: ${site.name}`);
+      }
+      // Sayğac və alert flag-ini sıfırla (hər uğurlu yoxlamada)
+      if (prevFailures !== 0 || downAlertSent) {
+        await dbRun(
+          `UPDATE sites SET consecutive_failures = 0, down_alert_sent = 0 WHERE id = ?`,
+          [site.id]
         );
       }
     }

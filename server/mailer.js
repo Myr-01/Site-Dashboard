@@ -53,6 +53,35 @@ export async function sendDowntimeAlert(site, checkResult) {
   }
 }
 
+// Sayt bərpa olduqda "yenidən online" email-i
+export async function sendRecoveryEmail(site) {
+  const settings = await getSmtpSettings();
+  if (!settings || !settings.recipient) return;
+
+  const transporter = createTransporter(settings);
+  const mailOptions = {
+    from: settings.user,
+    to: settings.recipient,
+    subject: `✅ Site Online: ${site.name}`,
+    html: `
+      <div style="font-family: sans-serif; padding: 20px; background: #14213d; color: #fff; border-radius: 8px;">
+        <h2 style="color: #16a34a; margin-top: 0;">✅ Sayt Yenidən Online</h2>
+        <p><strong>Sayt:</strong> ${site.name}</p>
+        <p><strong>URL:</strong> <a href="${site.url}" style="color: #fca311;">${site.url}</a></p>
+        <p><strong>Vaxt:</strong> ${new Date().toLocaleString()}</p>
+        <p style="color: #9aa3b8; margin-top: 20px;">— Site Monitor Dashboard</p>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Recovery email sent for ${site.name}`);
+  } catch (err) {
+    console.error(`Failed to send recovery email for ${site.name}:`, err.message);
+  }
+}
+
 export async function sendTestEmail() {
   const settings = await getSmtpSettings();
   if (!settings || !settings.recipient) {
