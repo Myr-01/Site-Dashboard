@@ -275,7 +275,7 @@ function App() {
                 onClick={() => withAuth(handleCsvExport)}
                 className="px-3 py-1.5 text-xs rounded-lg font-medium border border-border bg-navy-surface text-text-muted hover:text-white transition-colors"
               >
-                CSV Export
+                Excel Export
               </button>
 
               <button

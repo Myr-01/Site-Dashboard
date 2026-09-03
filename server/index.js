@@ -21,6 +21,7 @@ import { sendTestEmail } from './mailer.js';
 import { createBackup, listBackups, restoreBackup, deleteBackup, startAutoBackup, BACKUPS_PATH } from './backup.js';
 import { analyzeBackup } from './backup-analyzer.js';
 import { generateSiteReportPDF } from './pdfReport.js';
+import ExcelJS from 'exceljs';
 import { initPush, isPushEnabled, sendPushNotification } from './push.js';
 import { initOffsiteBackup } from './offsiteBackup.js';
 import { DATA_DIR } from './db.js';
@@ -784,14 +785,34 @@ app.get('/api/public/status', async (req, res) => {
 
 // === EXPORT ===
 
-// CSV export — fayl endirmə olduğuna görə token header-də və ya ?token= query-də
+// Excel (.xlsx) export — sütun genişlikləri, qalın başlıqlar, dondurulmuş başlıq sətri.
+// Fayl endirmə olduğuna görə token header-də və ya ?token= query-də ola bilər.
 app.get('/api/export/csv', requireAuthFlexible, blockGuestWrite, async (req, res) => {
   try {
     const isAdmin = req.user.role === 'admin';
     const sites = isAdmin
       ? await dbAll('SELECT * FROM sites ORDER BY name')
       : await dbAll('SELECT * FROM sites WHERE user_id = ? ORDER BY name', [req.user.id]);
-    const rows = [['Ad', 'URL', 'Status', 'Uptime (30g)', 'SSL', 'Domain Bitmə', 'Hosting', 'Qrup', 'İnterval (dəq)']];
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Site Monitor';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('Saytlar', {
+      views: [{ state: 'frozen', ySplit: 1 }], // başlıq sətrini dondur
+    });
+
+    // Sütunlar — key, başlıq və genişlik
+    sheet.columns = [
+      { header: 'Ad', key: 'name', width: 28 },
+      { header: 'URL', key: 'url', width: 38 },
+      { header: 'Status', key: 'status', width: 12 },
+      { header: 'Uptime (30g)', key: 'uptime', width: 14 },
+      { header: 'SSL', key: 'ssl', width: 12 },
+      { header: 'Domain Bitmə', key: 'domain_expiry', width: 16 },
+      { header: 'Hosting', key: 'hosting', width: 18 },
+      { header: 'Qrup', key: 'group', width: 16 },
+      { header: 'İnterval (dəq)', key: 'interval', width: 14 },
+    ];
 
     for (const site of sites) {
       const latestCheck = await dbGet(
@@ -800,33 +821,40 @@ app.get('/api/export/csv', requireAuthFlexible, blockGuestWrite, async (req, res
       );
       const uptimePercent = (await uptime30d(site.id)) ?? 'N/A';
 
-      rows.push([
-        site.name,
-        site.url,
-        site.maintenance_mode ? 'baxımda' : (latestCheck?.status || 'N/A'),
-        uptimePercent,
-        latestCheck?.ssl_valid == null ? 'N/A' : (latestCheck.ssl_valid ? 'Keçərli' : 'Keçərsiz'),
-        site.manual_domain_expiry || latestCheck?.domain_expiry || 'N/A',
-        latestCheck?.hosting_provider || 'N/A',
-        site.group_name || '',
-        site.check_interval_minutes ?? 30,
-      ]);
+      sheet.addRow({
+        name: site.name,
+        url: site.url,
+        status: site.maintenance_mode ? 'baxımda' : (latestCheck?.status || 'N/A'),
+        uptime: uptimePercent === 'N/A' ? 'N/A' : `${uptimePercent}%`,
+        ssl: latestCheck?.ssl_valid == null ? 'N/A' : (latestCheck.ssl_valid ? 'Keçərli' : 'Keçərsiz'),
+        domain_expiry: site.manual_domain_expiry || latestCheck?.domain_expiry || 'N/A',
+        hosting: latestCheck?.hosting_provider || 'N/A',
+        group: site.group_name || '',
+        interval: site.check_interval_minutes ?? 30,
+      });
     }
 
-    // Ayırıcı: nöqtəli vergül (;) — Azərbaycan/Avropa Excel lokalının default ayırıcısıdır.
-    // Vergül (,) istifadə etsək, həmin lokalda Excel bütün sətri tək xanaya yığır.
-    const DELIM = ';';
-    const csv = rows
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(DELIM))
-      .join('\r\n');
+    // Başlıq sətrini formatla — qalın, arxa fon rəngi, ağ mətn
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF14213D' } };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'left' };
+    headerRow.height = 20;
 
-    // QEYD: "sep=;" sətri İSTİFADƏ EDİLMİR — o, UTF-8 BOM-un tanınmasına mane olur və
-    // Azərbaycan hərfləri (ə, ş, ç, ğ) korlanır. Bunun əvəzinə:
-    //   - UTF-8 BOM (\uFEFF) → Excel faylı UTF-8 kimi oxuyur (hərflər düzgün)
-    //   - ; ayırıcısı → AZ/Avropa lokalında Excel avtomatik tanıyır
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', 'attachment; filename="sites-export.csv"');
-    res.send('\uFEFF' + csv);
+    // Status sütununu rənglə (online=yaşıl, offline=qırmızı, baxımda=mavi)
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const statusCell = row.getCell('status');
+      const val = String(statusCell.value || '').toLowerCase();
+      if (val === 'online') statusCell.font = { color: { argb: 'FF16A34A' }, bold: true };
+      else if (val === 'offline') statusCell.font = { color: { argb: 'FFDC2626' }, bold: true };
+      else if (val === 'baxımda') statusCell.font = { color: { argb: 'FF2563EB' }, bold: true };
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="sites-export.xlsx"');
+    res.send(Buffer.from(buffer));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
