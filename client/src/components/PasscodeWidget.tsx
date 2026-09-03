@@ -64,7 +64,7 @@ export default function PasscodeWidget() {
   if (!data) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-navy-surface border border-accent/30 rounded-lg">
+    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/10 border border-accent/30 rounded-lg">
       <span className="text-text-muted text-xs">Giriş kodu:</span>
       <span className="text-accent font-mono font-bold text-sm tracking-widest">{data.code}</span>
       <button
@@ -77,7 +77,7 @@ export default function PasscodeWidget() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
         </svg>
       </button>
-      <span className="text-text-muted/60 text-[10px] border-l border-border pl-2">{remaining}</span>
+      <span className="text-text-muted/60 text-[10px] border-l border-accent/20 pl-2">{remaining}</span>
     </div>
   );
 }
