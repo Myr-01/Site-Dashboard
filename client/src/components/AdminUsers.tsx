@@ -59,7 +59,6 @@ export default function AdminUsers() {
 
   return (
     <div>
-      <h2 className="text-xl font-heading font-bold text-white mb-1">İstifadəçilər</h2>
       <p className="text-text-muted text-sm mb-6">{users.length} hesab</p>
 
       <div className="bg-navy-surface border border-border rounded-2xl overflow-hidden">
@@ -103,15 +102,27 @@ export default function AdminUsers() {
                           <button
                             onClick={() => toggleDisabled(u)}
                             disabled={busyId === u.id}
-                            className="px-2.5 py-1 text-xs rounded border border-border text-text-muted hover:text-white transition-colors disabled:opacity-50"
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors disabled:opacity-50 ${
+                              u.disabled
+                                ? 'border-green-400/30 text-green-400 hover:bg-green-400/10'
+                                : 'border-border text-text-muted hover:text-white hover:bg-navy-light'
+                            }`}
                           >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              {u.disabled
+                                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L5.636 5.636" />}
+                            </svg>
                             {u.disabled ? 'Aktivləşdir' : 'Deaktiv et'}
                           </button>
                           <button
                             onClick={() => remove(u)}
                             disabled={busyId === u.id}
-                            className="px-2.5 py-1 text-xs rounded border border-red-400/30 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-red-400/30 text-red-400 hover:bg-red-400/10 transition-colors disabled:opacity-50"
                           >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                             Sil
                           </button>
                         </div>

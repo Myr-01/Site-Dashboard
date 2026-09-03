@@ -24,7 +24,6 @@ export default function AdminSites() {
 
   return (
     <div>
-      <h2 className="text-xl font-heading font-bold text-white mb-1">Bütün Saytlar</h2>
       <p className="text-text-muted text-sm mb-4">{sites.length} sayt · bütün istifadəçilər</p>
 
       <input

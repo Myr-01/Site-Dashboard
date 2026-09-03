@@ -54,8 +54,6 @@ export default function AdminSettings() {
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-xl font-heading font-bold text-white mb-6">Parametrlər</h2>
-
       {/* Branding */}
       <div className="bg-navy-surface border border-border rounded-2xl p-6 mb-6">
         <h3 className="text-white font-medium mb-1">Görünüş (Branding)</h3>
