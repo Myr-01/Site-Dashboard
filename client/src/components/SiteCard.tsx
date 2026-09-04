@@ -23,7 +23,7 @@ function getSeoScore(check: Site['latestCheck']): number {
 }
 
 function formatTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return 'Never';
+  if (!dateStr) return 'Heç vaxt';
   const date = new Date(dateStr + 'Z');
   return date.toLocaleString();
 }
@@ -109,7 +109,7 @@ export default function SiteCard({
           </div>
         </div>
         {isMaintenance ? (
-          <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full whitespace-nowrap flex items-center gap-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30">
+          <span className="ml-2 px-2 py-0.5 text-xs font-bold rounded-full whitespace-nowrap flex items-center gap-1.5 bg-blue-400/10 text-blue-400 border border-blue-400/30">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
             BAXIMDA
           </span>
@@ -137,17 +137,17 @@ export default function SiteCard({
             </div>
           )}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-text-muted text-xs">Response</span>
+            <span className="text-text-muted text-xs">Cavab</span>
             <span className="text-white font-medium">{check.response_time ? `${check.response_time}ms` : '—'}</span>
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-text-muted text-xs">SSL</span>
             <span className={`font-medium text-xs ${check.ssl_valid === 1 ? 'text-green-400' : check.ssl_valid === 0 ? 'text-red-400' : 'text-text-muted'}`}>
               {check.ssl_valid === 1
-                ? `Valid (${check.ssl_days_remaining}d)`
+                ? `Keçərli (${check.ssl_days_remaining}g)`
                 : check.ssl_valid === 0
-                ? 'Invalid'
-                : 'N/A'}
+                ? 'Keçərsiz'
+                : '—'}
             </span>
           </div>
           <div className="flex items-center justify-between gap-2">

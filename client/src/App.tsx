@@ -273,7 +273,7 @@ function App() {
               </>
             )}
           </h1>
-          <p className="text-text-muted text-sm mt-1.5">Real-time website monitoring dashboard</p>
+          <p className="text-text-muted text-sm mt-1.5">Real-time sayt monitorinq paneli</p>
           <p className="text-text-muted/70 text-xs mt-1">
             Qısayollar: <kbd className="px-1 py-0.5 bg-navy-surface border border-border rounded text-[10px]">/</kbd> axtar
             {' · '}

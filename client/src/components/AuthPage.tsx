@@ -177,7 +177,7 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
               </>
             )}
           </h1>
-          <p className="text-text-muted text-sm mt-2">Real-time website monitoring</p>
+          <p className="text-text-muted text-sm mt-2">Real-time sayt monitorinqu</p>
         </div>
 
         <div className="bg-navy-surface border border-border rounded-2xl p-6 shadow-2xl">
