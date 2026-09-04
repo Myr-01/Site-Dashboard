@@ -21,6 +21,7 @@ export default function StatsBar({ sites }: StatsBarProps) {
       value: total,
       valueColor: 'text-white',
       topBorder: 'border-t-accent',
+      hoverBorder: 'hover:border-accent/50',
       iconColor: 'text-accent',
       iconBg: 'bg-accent/15',
       iconBorder: 'border-accent/30',
@@ -32,6 +33,7 @@ export default function StatsBar({ sites }: StatsBarProps) {
       value: online,
       valueColor: 'text-green-400',
       topBorder: 'border-t-green-400',
+      hoverBorder: 'hover:border-green-400/50',
       iconColor: 'text-green-400',
       iconBg: 'bg-green-400/15',
       iconBorder: 'border-green-400/30',
@@ -43,6 +45,7 @@ export default function StatsBar({ sites }: StatsBarProps) {
       value: offline,
       valueColor: offline > 0 ? 'text-red-400' : 'text-white',
       topBorder: offline > 0 ? 'border-t-red-400' : 'border-t-border',
+      hoverBorder: offline > 0 ? 'hover:border-red-400/50' : 'hover:border-text-muted/40',
       iconColor: offline > 0 ? 'text-red-400' : 'text-text-muted',
       iconBg: offline > 0 ? 'bg-red-400/15' : 'bg-navy-light',
       iconBorder: offline > 0 ? 'border-red-400/30' : 'border-border',
@@ -54,6 +57,7 @@ export default function StatsBar({ sites }: StatsBarProps) {
       value: `${avgTime}ms`,
       valueColor: 'text-accent',
       topBorder: 'border-t-blue-400',
+      hoverBorder: 'hover:border-blue-400/50',
       iconColor: 'text-blue-400',
       iconBg: 'bg-blue-400/15',
       iconBorder: 'border-blue-400/30',
@@ -67,7 +71,7 @@ export default function StatsBar({ sites }: StatsBarProps) {
       {stats.map(stat => (
         <div
           key={stat.label}
-          className={`group relative bg-navy-surface border border-border border-t-2 ${stat.topBorder} rounded-2xl p-5 overflow-hidden hover:border-border/80 transition-colors`}
+          className={`group relative bg-navy-surface border border-border border-t-2 ${stat.topBorder} ${stat.hoverBorder} rounded-2xl p-5 overflow-hidden transition-colors`}
         >
           {/* Arxa fon glow */}
           <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-10 ${stat.glow}`} />
