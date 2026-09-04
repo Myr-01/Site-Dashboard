@@ -120,7 +120,7 @@ function AdminDashboard() {
             <div className="relative flex items-start justify-between">
               <div>
                 <p className="text-text-muted text-xs mb-2">{c.label}</p>
-                <p className="text-4xl md:text-[2.75rem] font-heading font-bold text-white leading-none tracking-tight">{c.value ?? '—'}</p>
+                <p className="text-3xl font-heading font-bold text-white leading-none tracking-tight">{c.value ?? '—'}</p>
               </div>
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.iconBg} border ${c.iconBorder} transition-transform group-hover:scale-105`}>
                 <svg className={`w-5 h-5 ${c.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
