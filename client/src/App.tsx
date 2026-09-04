@@ -274,11 +274,6 @@ function App() {
             )}
           </h1>
           <p className="text-text-muted text-sm mt-1.5">Real-time sayt monitorinq paneli</p>
-          <p className="text-text-muted/70 text-xs mt-1">
-            Qısayollar: <kbd className="px-1 py-0.5 bg-navy-surface border border-border rounded text-[10px]">/</kbd> axtar
-            {' · '}
-            <kbd className="px-1 py-0.5 bg-navy-surface border border-border rounded text-[10px]">n</kbd> yeni sayt
-          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -299,7 +294,7 @@ function App() {
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent border border-accent/20">Qonaq</span>
             )}
             <span className="text-text-muted text-xs max-w-[140px] truncate" title={user.email || undefined}>
-              {isGuest ? 'Baxış rejimi' : (user.email || 'admin')}{isAdmin ? ' (admin)' : ''}
+              {isGuest ? 'Baxış rejimi' : (user.email || 'admin')}
             </span>
             <button
               onClick={doLogout}
