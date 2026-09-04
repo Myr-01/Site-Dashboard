@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiUrl } from '../api';
+import { authHeaders } from '../useAuth';
 
 interface SiteLocation {
   id: number;
@@ -27,9 +28,10 @@ export default function WorldMap() {
 
   const fetchLocations = async () => {
     try {
-      const res = await fetch(apiUrl('/api/sites/locations'));
+      const res = await fetch(apiUrl('/api/sites/locations'), { headers: { ...authHeaders() } });
+      if (!res.ok) return;
       const data = await res.json();
-      setLocations(data);
+      setLocations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch locations:', err);
     }

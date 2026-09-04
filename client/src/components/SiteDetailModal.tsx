@@ -163,7 +163,8 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   // Saxlandıqdan sonra site datasını yenilə (reload yox)
   const refreshSite = async () => {
     try {
-      const res = await fetch(apiUrl('/api/sites'));
+      const res = await fetch(apiUrl('/api/sites'), { headers: { ...authHeaders() } });
+      if (!res.ok) return;
       const all: Site[] = await res.json();
       const updated = all.find(s => s.id === site.id);
       if (updated) {

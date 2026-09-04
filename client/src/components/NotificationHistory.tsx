@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { NotificationLogEntry } from '../types';
 import { apiUrl } from '../api';
+import { authHeaders } from '../useAuth';
 
 interface NotificationHistoryProps {
   siteId?: number;
@@ -20,7 +21,7 @@ export default function NotificationHistory({ siteId }: NotificationHistoryProps
       ? apiUrl(`/api/notifications?site_id=${siteId}`)
       : apiUrl('/api/notifications');
 
-    fetch(url)
+    fetch(url, { headers: { ...authHeaders() } })
       .then(res => {
         if (!res.ok) throw new Error(`Server xətası: ${res.status}`);
         return res.json();

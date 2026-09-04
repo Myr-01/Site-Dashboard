@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check } from '../types';
 import { apiUrl } from '../api';
+import { authHeaders } from '../useAuth';
 
 interface UptimeCalendarProps {
   siteId: number;
@@ -18,9 +19,10 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(apiUrl(`/api/sites/${siteId}/history`))
-      .then(res => res.json())
+    fetch(apiUrl(`/api/sites/${siteId}/history`), { headers: { ...authHeaders() } })
+      .then(res => (res.ok ? res.json() : []))
       .then((history: Check[]) => {
+        if (!Array.isArray(history)) { setData([]); setLoading(false); return; }
         const daysAgo = Date.now() - days * 24 * 60 * 60 * 1000;
         const filtered = history.filter(h => new Date(h.checked_at + 'Z').getTime() > daysAgo);
 
