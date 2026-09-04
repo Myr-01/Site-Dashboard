@@ -57,7 +57,9 @@ export default function SiteCard({
       className={`relative bg-navy-surface border rounded-2xl p-5 transition-[border-color,box-shadow,transform] duration-200 group ${
         isGuest ? 'cursor-default' : 'cursor-pointer hover:shadow-lg hover:shadow-accent/5 hover:-translate-y-0.5'
       } ${
-        isSelected ? 'border-accent' : 'border-border hover:border-accent/50'
+        isSelected
+          ? 'border-accent ring-2 ring-accent/40 shadow-lg shadow-accent/10'
+          : 'border-border hover:border-accent/50'
       }`}
       onClick={handleCardClick}
     >
@@ -70,20 +72,29 @@ export default function SiteCard({
         />
       )}
 
-      {/* Seçim checkbox-u */}
+      {/* Seçim indikatoru — custom (accent rəngli, rounded, tik ikonu) */}
       {selectionMode && (
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={() => onToggleSelect?.(site.id)}
-          onClick={e => e.stopPropagation()}
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onToggleSelect?.(site.id); }}
           aria-label={`${site.name} saytını seç`}
-          className="absolute top-3 right-3 w-4 h-4 accent-accent cursor-pointer z-10"
-        />
+          aria-pressed={isSelected}
+          className={`absolute top-3 right-3 z-10 w-6 h-6 rounded-lg flex items-center justify-center transition-all ${
+            isSelected
+              ? 'bg-accent border-2 border-accent scale-100'
+              : 'bg-navy-light/80 border-2 border-border hover:border-accent/60'
+          }`}
+        >
+          {isSelected && (
+            <svg className="w-4 h-4 text-bg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </button>
       )}
 
       {/* Header */}
-      <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pr-6' : ''}`}>
+      <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pr-9' : ''}`}>
         <div className="flex-1 min-w-0">
           <h3 className={`font-heading font-semibold text-white truncate group-hover:text-accent transition-colors ${site.color_tag ? 'pl-4' : ''}`}>
             {site.name}
