@@ -149,6 +149,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       onClick={onClose}
     >
       <div 
+        role="dialog" aria-modal="true" aria-label="Parametrlər"
         className="bg-navy-surface border border-border rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >

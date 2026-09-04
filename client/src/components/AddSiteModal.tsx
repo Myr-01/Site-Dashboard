@@ -79,8 +79,8 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-      <div className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
-        <h2 className="text-xl font-heading font-bold text-white mb-6">Add Site</h2>
+      <div role="dialog" aria-modal="true" aria-labelledby="add-site-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
+        <h2 id="add-site-title" className="text-xl font-heading font-bold text-white mb-6">Sayt Əlavə Et</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-text-muted text-sm mb-1.5">Site Name</label>

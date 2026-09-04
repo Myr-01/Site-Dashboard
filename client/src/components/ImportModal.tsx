@@ -56,8 +56,8 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-      <div className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
-        <h2 className="text-xl font-heading font-bold text-white mb-4">Import Sites from CSV</h2>
+      <div role="dialog" aria-modal="true" aria-labelledby="import-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
+        <h2 id="import-title" className="text-xl font-heading font-bold text-white mb-4">CSV-dən Sayt İdxalı</h2>
         <p className="text-text-muted text-sm mb-4">
           CSV should have columns: <code className="text-accent">name</code>, <code className="text-accent">url</code>
         </p>

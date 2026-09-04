@@ -36,6 +36,7 @@ export default function PasscodeModal({ onSuccess, onClose, title }: PasscodeMod
       onClick={onClose}
     >
       <div
+        role="dialog" aria-modal="true" aria-label="Giriş kodu"
         className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

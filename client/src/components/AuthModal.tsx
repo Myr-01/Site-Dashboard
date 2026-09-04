@@ -72,6 +72,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
       onClick={handleClose}
     >
       <div
+        role="dialog" aria-modal="true" aria-label="Admin girişi"
         className={`bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl transition-[transform,opacity] duration-200 ${
           isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'
         }`}
