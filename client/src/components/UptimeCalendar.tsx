@@ -58,7 +58,7 @@ export default function UptimeCalendar({ siteId, days = 30 }: UptimeCalendarProp
   }, [siteId, days]);
 
   if (loading) {
-    return <p className="text-text-muted text-sm">Loading...</p>;
+    return <p className="text-text-muted text-sm">Yüklənir...</p>;
   }
 
   const getColor = (uptime: number) => {
