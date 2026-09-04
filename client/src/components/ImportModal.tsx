@@ -24,7 +24,7 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      setError('Please select a CSV file');
+      setError('Əvvəlcə CSV faylı seçin');
       return;
     }
 
@@ -43,7 +43,7 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import failed');
+      if (!res.ok) throw new Error(data.error || 'İdxal alınmadı. Faylı yoxlayıb yenidən cəhd edin.');
 
       setResult(data);
       onImported();
@@ -59,7 +59,7 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
       <div role="dialog" aria-modal="true" aria-labelledby="import-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
         <h2 id="import-title" className="text-xl font-heading font-bold text-white mb-4">CSV-dən Sayt İdxalı</h2>
         <p className="text-text-muted text-sm mb-4">
-          CSV should have columns: <code className="text-accent">name</code>, <code className="text-accent">url</code>
+          CSV faylında bu sütunlar olmalıdır: <code className="text-accent">name</code>, <code className="text-accent">url</code>
         </p>
 
         <input
@@ -73,9 +73,9 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
 
         {result && (
           <div className="mt-4 p-3 bg-navy-light rounded-lg border border-border">
-            <p className="text-green-400 text-sm">âœ“ {result.success} sites imported successfully</p>
+            <p className="text-green-400 text-sm">✓ {result.success} sayt uğurla idxal edildi</p>
             {result.errors > 0 && (
-              <p className="text-red-400 text-sm mt-1">âœ— {result.errors} rows failed</p>
+              <p className="text-red-400 text-sm mt-1">✕ {result.errors} sətir idxal edilmədi</p>
             )}
           </div>
         )}
@@ -85,14 +85,14 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
             onClick={onClose}
             className="flex-1 px-4 py-2.5 text-sm border border-border text-text-muted rounded-lg hover:text-white transition-colors"
           >
-            Close
+            Bağla
           </button>
           <button
             onClick={handleUpload}
             disabled={loading}
             className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Importing...' : 'Upload & Import'}
+            {loading ? 'İdxal edilir...' : 'Yüklə və idxal et'}
           </button>
         </div>
       </div>

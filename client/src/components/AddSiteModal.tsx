@@ -45,7 +45,7 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
         return;
       }
       if (!res.ok) {
-        let errorMsg = 'Failed to add site';
+        let errorMsg = 'Sayt əlavə edilmədi. Yenidən cəhd edin.';
         try {
           const data = JSON.parse(text);
           errorMsg = data.error || errorMsg;
@@ -56,7 +56,7 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
       onAdded();
       onClose();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Server is not responding. Make sure the backend is running on port 3001.');
+      setError(err instanceof Error ? err.message : 'Server ilə əlaqə yoxdur. İnternet bağlantınızı yoxlayın.');
     } finally {
       setLoading(false);
     }
@@ -83,12 +83,12 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
         <h2 id="add-site-title" className="text-xl font-heading font-bold text-white mb-6">Sayt Əlavə Et</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-text-muted text-sm mb-1.5">Site Name</label>
+            <label className="block text-text-muted text-sm mb-1.5">Sayt adı</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="My Website"
+              placeholder="Məsələn: Mənim saytım"
               required
               className="w-full px-4 py-2.5 bg-navy-light border border-border rounded-lg text-white placeholder:text-text-muted/50 focus:outline-none focus:border-accent transition-colors"
             />
@@ -148,14 +148,14 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
               onClick={onClose}
               className="flex-1 px-4 py-2.5 text-sm border border-border text-text-muted rounded-lg hover:text-white transition-colors"
             >
-              Cancel
+              Ləğv et
             </button>
             <button
               type="submit"
               disabled={loading}
               className="flex-1 px-4 py-2.5 text-sm bg-accent text-bg font-medium rounded-lg hover:bg-accent/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Adding...' : 'Add Site'}
+              {loading ? 'Əlavə edilir...' : 'Əlavə et'}
             </button>
           </div>
         </form>
