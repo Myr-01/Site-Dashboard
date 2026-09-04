@@ -10,6 +10,7 @@ import { dialog } from './Dialog';
 import { apiUrl } from '../api';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { accentColor } from '../accent';
 
 interface SiteDetailModalProps {
   site: Site;
@@ -1036,8 +1037,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
                   <button
                     onClick={saveNotes}
                     disabled={notesSaving}
-                    className="w-full py-2.5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }}
+                    className="w-full py-2.5 text-sm font-semibold rounded-xl bg-accent text-bg transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {notesSaving ? 'Saxlanılır...' : 'Saxla'}
                   </button>
@@ -1230,6 +1230,7 @@ function EditFieldModal({
   const enterVis2 = useEnterAnimation();
   const visible = enterVis2 && !isClosing2;
   const trapRef = useFocusTrap<HTMLDivElement>();
+  const accentBorder = accentColor(0.25);
 
   const close = () => { setIsClosing2(true); setTimeout(onClose, 200); };
   const save = async () => { setLoading(true); await onSave(val); setLoading(false); };
@@ -1271,7 +1272,7 @@ function EditFieldModal({
             autoFocus
             onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') close(); }}
             className="w-full px-4 py-3 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 transition-[border-color,box-shadow]"
-            style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(252,163,17,0.25)' }}
+            style={{ background: 'rgba(255,255,255,0.07)', border: `1px solid ${accentBorder}` }}
             placeholder={type === 'date' ? 'YYYY-MM-DD' : `${label} daxil edin`}
           />
           {type === 'date' && <p className="text-text-muted text-xs mt-2 ml-1">Nümunə: 2026-12-31</p>}
@@ -1288,8 +1289,7 @@ function EditFieldModal({
           <button
             onClick={save}
             disabled={loading}
-            className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }}
+            className="flex-1 py-2.5 text-sm font-semibold rounded-xl bg-accent text-bg transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? '...' : 'Saxla'}
           </button>

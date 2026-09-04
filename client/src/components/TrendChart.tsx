@@ -12,6 +12,7 @@ import {
 } from 'chart.js';
 import { apiUrl } from '../api';
 import { authHeaders } from '../useAuth';
+import { accentColor } from '../accent';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
 
@@ -49,6 +50,8 @@ export default function TrendChart({ siteId }: TrendChartProps) {
     return dt.toLocaleDateString('az-AZ', { day: '2-digit', month: '2-digit' });
   });
 
+  const accent = accentColor();
+
   const chartData = {
     labels,
     datasets: [
@@ -66,7 +69,7 @@ export default function TrendChart({ siteId }: TrendChartProps) {
       {
         label: 'Cavab müddəti (ms)',
         data: data.map(d => (d.avg_response_time == null ? null : Math.round(d.avg_response_time))),
-        borderColor: '#fca311',
+        borderColor: accent,
         backgroundColor: 'transparent',
         fill: false,
         tension: 0.3,
@@ -119,7 +122,7 @@ export default function TrendChart({ siteId }: TrendChartProps) {
         position: 'right' as const,
         beginAtZero: true,
         grid: { drawOnChartArea: false },
-        ticks: { color: '#fca311', callback: (v: string | number) => `${v}ms` },
+        ticks: { color: accent, callback: (v: string | number) => `${v}ms` },
       },
     },
   };

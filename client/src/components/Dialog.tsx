@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { accentColor, accentHex } from '../accent';
 
 /* =============================================
    Universal Dialog Component
@@ -69,6 +70,8 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
   const visible = enterVisible && !isClosing;
   const [showPass, setShowPass] = useState(false);
   const trapRef = useFocusTrap<HTMLDivElement>();
+  const accent = accentHex();
+  const accentStroke = config.danger ? '#ef4444' : accent;
 
   const close = (val: string | boolean | null) => {
     setIsClosing(true);
@@ -103,8 +106,8 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
         className={`w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl transition-[transform,opacity] duration-200 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-3'}`}
         style={{
           background: 'linear-gradient(160deg, #14213d 0%, #1a2a4a 100%)',
-          border: config.danger ? '1px solid rgba(239,68,68,0.35)' : '1px solid rgba(252,163,17,0.2)',
-          boxShadow: config.danger ? '0 25px 50px rgba(239,68,68,0.15)' : '0 25px 50px rgba(252,163,17,0.08)',
+          border: config.danger ? '1px solid rgba(239,68,68,0.35)' : `1px solid ${accentColor(0.2)}`,
+          boxShadow: config.danger ? '0 25px 50px rgba(239,68,68,0.15)' : `0 25px 50px ${accentColor(0.08)}`,
         }}
         onClick={e => e.stopPropagation()}
       >
@@ -114,22 +117,22 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
           <div className="flex items-center gap-3 mb-3">
             <div
               className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: config.danger ? 'rgba(239,68,68,0.15)' : 'rgba(252,163,17,0.12)' }}
+              style={{ background: config.danger ? 'rgba(239,68,68,0.15)' : accentColor(0.12) }}
             >
               {config.type === 'password' ? (
-                <svg className="w-4 h-4" fill="none" stroke={config.danger ? '#ef4444' : '#fca311'} viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke={accentStroke} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               ) : config.type === 'confirm' ? (
-                <svg className="w-4 h-4" fill="none" stroke={config.danger ? '#ef4444' : '#fca311'} viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke={accentStroke} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               ) : config.type === 'prompt' ? (
-                <svg className="w-4 h-4" fill="none" stroke="#fca311" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke={accent} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4" fill="none" stroke="#fca311" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke={accent} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               )}
@@ -154,8 +157,8 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
                 className="w-full px-4 py-3 rounded-xl text-white text-sm focus:outline-none focus:ring-2 transition-[border-color,box-shadow]"
                 style={{
                   background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(252,163,17,0.25)',
-                  caretColor: '#fca311',
+                  border: `1px solid ${accentColor(0.25)}`,
+                  caretColor: accent,
                 }}
                 placeholder={config.type === 'password' ? '••••••••' : ''}
               />
@@ -197,7 +200,7 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
             className="flex-1 py-2.5 text-sm font-semibold rounded-xl transition-opacity hover:opacity-90"
             style={config.danger
               ? { background: 'linear-gradient(135deg, #ef4444, #dc2626)', color: '#fff' }
-              : { background: 'linear-gradient(135deg, #fca311, #e8940a)', color: '#000' }
+              : { background: `linear-gradient(135deg, ${accent}, ${accent})`, color: '#000' }
             }
           >
             {config.confirmLabel || (isAlert ? 'Tamam' : isConfirm ? 'Bəli, davam et' : 'Saxla')}

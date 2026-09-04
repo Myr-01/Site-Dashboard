@@ -13,6 +13,7 @@ import {
 } from 'chart.js';
 import { apiUrl } from '../api';
 import { authHeaders } from '../useAuth';
+import { accentColor } from '../accent';
 
 ChartJS.register(
   CategoryScale,
@@ -59,7 +60,7 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <p className="text-text-muted text-sm">Loading chart...</p>
+        <p className="text-text-muted text-sm">Qrafik yüklənir...</p>
       </div>
     );
   }
@@ -67,10 +68,13 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center h-48">
-        <p className="text-text-muted text-sm">No data available</p>
+        <p className="text-text-muted text-sm">Hələ məlumat yoxdur</p>
       </div>
     );
   }
+
+  const accent = accentColor();
+  const accentSoft = accentColor(0.12);
 
   const chartData = {
     labels: data.map(d => {
@@ -79,15 +83,15 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
     }),
     datasets: [
       {
-        label: 'Response Time (ms)',
+        label: 'Cavab müddəti (ms)',
         data: data.map(d => d.response_time || 0),
-        borderColor: '#fca311',
-        backgroundColor: 'rgba(252, 163, 17, 0.12)',
+        borderColor: accent,
+        backgroundColor: accentSoft,
         fill: true,
         tension: 0.4,
         pointRadius: 2,
         pointHoverRadius: 5,
-        pointBackgroundColor: '#fca311',
+        pointBackgroundColor: accent,
         pointBorderColor: '#14213d',
         pointBorderWidth: 2,
       },
@@ -105,7 +109,7 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
         backgroundColor: '#14213d',
         titleColor: '#fff',
         bodyColor: '#9aa3b8',
-        borderColor: '#fca311',
+        borderColor: accent,
         borderWidth: 1,
         padding: 10,
         displayColors: false,
