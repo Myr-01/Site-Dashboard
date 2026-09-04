@@ -77,11 +77,11 @@ export default function StatsBar({ sites }: StatsBarProps) {
           <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-10 ${stat.glow}`} />
           <div className="relative flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-text-muted text-[11px] uppercase tracking-wider mb-1.5 truncate">{stat.label}</p>
-              <p className={`text-3xl font-heading font-bold leading-none ${stat.valueColor}`}>{stat.value}</p>
+              <p className="text-text-muted text-[11px] uppercase tracking-wider mb-2 truncate">{stat.label}</p>
+              <p className={`text-4xl md:text-[2.75rem] font-heading font-bold leading-none tracking-tight ${stat.valueColor}`}>{stat.value}</p>
             </div>
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${stat.iconBg} border ${stat.iconBorder} transition-transform group-hover:scale-105`}>
-              <svg className={`w-5 h-5 ${stat.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${stat.iconBg} border ${stat.iconBorder} transition-transform group-hover:scale-110`}>
+              <svg className={`w-6 h-6 ${stat.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={stat.iconPath} />
               </svg>
             </div>

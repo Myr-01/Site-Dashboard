@@ -164,14 +164,20 @@ export default function AuthPage({ onAuthenticated }: AuthPageProps) {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-heading font-bold text-white flex items-center justify-center gap-2">
+          <h1 className="text-3xl font-heading font-bold text-white flex items-center justify-center gap-2.5 tracking-tight">
             {branding.logo_url ? (
-              <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-9 w-auto max-w-[200px] object-contain" />
+              <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-10 w-auto max-w-[220px] object-contain" />
             ) : (
-              <><span className="text-accent">●</span> {branding.title}</>
+              <>
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-accent/60 animate-ping" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-accent" />
+                </span>
+                {branding.title}
+              </>
             )}
           </h1>
-          <p className="text-text-muted text-sm mt-1">Real-time website monitoring</p>
+          <p className="text-text-muted text-sm mt-2">Real-time website monitoring</p>
         </div>
 
         <div className="bg-navy-surface border border-border rounded-2xl p-6 shadow-2xl">

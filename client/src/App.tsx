@@ -260,14 +260,20 @@ function App() {
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-heading font-bold text-white flex items-center gap-2">
+          <h1 className="text-3xl md:text-4xl font-heading font-bold text-white flex items-center gap-2.5 tracking-tight">
             {branding.logo_url ? (
-              <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-8 w-auto max-w-[160px] object-contain" />
+              <img src={apiUrl(branding.logo_url)} alt={branding.title} className="h-9 w-auto max-w-[180px] object-contain" />
             ) : (
-              <><span className="text-accent">●</span> {branding.title}</>
+              <>
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-accent/60 animate-ping" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-accent" />
+                </span>
+                {branding.title}
+              </>
             )}
           </h1>
-          <p className="text-text-muted text-sm mt-1">Real-time website monitoring dashboard</p>
+          <p className="text-text-muted text-sm mt-1.5">Real-time website monitoring dashboard</p>
           <p className="text-text-muted/70 text-xs mt-1">
             Qısayollar: <kbd className="px-1 py-0.5 bg-navy-surface border border-border rounded text-[10px]">/</kbd> axtar
             {' · '}

@@ -74,6 +74,7 @@ function AdminDashboard() {
       label: 'İstifadəçilər',
       value: stats?.total_users,
       topBorder: 'border-t-accent',
+      hoverBorder: 'hover:border-accent/50',
       iconColor: 'text-accent',
       iconBg: 'bg-accent/15',
       iconBorder: 'border-accent/30',
@@ -84,6 +85,7 @@ function AdminDashboard() {
       label: 'Saytlar',
       value: stats?.total_sites,
       topBorder: 'border-t-blue-400',
+      hoverBorder: 'hover:border-blue-400/50',
       iconColor: 'text-blue-400',
       iconBg: 'bg-blue-400/15',
       iconBorder: 'border-blue-400/30',
@@ -95,6 +97,7 @@ function AdminDashboard() {
       value: stats?.issue_sites,
       // 0 problem = yaşıl (yaxşı), problem varsa qırmızı
       topBorder: hasIssues ? 'border-t-red-400' : 'border-t-green-400',
+      hoverBorder: hasIssues ? 'hover:border-red-400/50' : 'hover:border-green-400/50',
       iconColor: hasIssues ? 'text-red-400' : 'text-green-400',
       iconBg: hasIssues ? 'bg-red-400/15' : 'bg-green-400/15',
       iconBorder: hasIssues ? 'border-red-400/30' : 'border-green-400/30',
@@ -110,14 +113,14 @@ function AdminDashboard() {
         {cards.map(c => (
           <div
             key={c.label}
-            className={`group relative bg-navy-surface border border-border border-t-2 ${c.topBorder} rounded-2xl p-5 overflow-hidden hover:border-border/80 transition-colors`}
+            className={`group relative bg-navy-surface border border-border border-t-2 ${c.topBorder} ${c.hoverBorder} rounded-2xl p-5 overflow-hidden transition-colors`}
           >
             {/* Arxa fon glow */}
             <div className={`absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-10 ${c.glowBg}`} />
             <div className="relative flex items-start justify-between">
               <div>
                 <p className="text-text-muted text-xs mb-2">{c.label}</p>
-                <p className="text-4xl font-heading font-bold text-white leading-none">{c.value ?? '—'}</p>
+                <p className="text-4xl md:text-[2.75rem] font-heading font-bold text-white leading-none tracking-tight">{c.value ?? '—'}</p>
               </div>
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.iconBg} border ${c.iconBorder} transition-transform group-hover:scale-105`}>
                 <svg className={`w-5 h-5 ${c.iconColor}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">

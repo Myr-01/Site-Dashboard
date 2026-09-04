@@ -96,7 +96,7 @@ export default function SiteCard({
       {/* Header */}
       <div className={`flex items-start justify-between mb-3 ${selectionMode ? 'pr-9' : ''}`}>
         <div className="flex-1 min-w-0">
-          <h3 className={`font-heading font-semibold text-white truncate group-hover:text-accent transition-colors ${site.color_tag ? 'pl-4' : ''}`}>
+          <h3 className={`font-heading font-bold text-base text-white truncate group-hover:text-accent transition-colors ${site.color_tag ? 'pl-4' : ''}`}>
             {site.name}
           </h3>
           <div className="flex items-center gap-2 mt-0.5">
