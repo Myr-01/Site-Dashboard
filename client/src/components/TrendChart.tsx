@@ -11,6 +11,7 @@ import {
   Filler,
 } from 'chart.js';
 import { apiUrl } from '../api';
+import { authHeaders } from '../useAuth';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
 
@@ -35,7 +36,7 @@ export default function TrendChart({ siteId }: TrendChartProps) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(apiUrl(`/api/sites/${siteId}/trend?days=${range}`))
+    fetch(apiUrl(`/api/sites/${siteId}/trend?days=${range}`), { headers: { ...authHeaders() } })
       .then(res => (res.ok ? res.json() : []))
       .then(d => { if (!cancelled) setData(Array.isArray(d) ? d : []); })
       .catch(() => { if (!cancelled) setData([]); })

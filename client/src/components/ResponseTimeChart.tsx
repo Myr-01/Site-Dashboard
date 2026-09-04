@@ -12,6 +12,7 @@ import {
   Filler,
 } from 'chart.js';
 import { apiUrl } from '../api';
+import { authHeaders } from '../useAuth';
 
 ChartJS.register(
   CategoryScale,
@@ -38,15 +39,18 @@ export default function ResponseTimeChart({ siteId }: ResponseTimeChartProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(apiUrl(`/api/sites/${siteId}/history`))
-      .then(res => res.json())
+    // history endpoint-i auth tələb edir (multi-user) — authHeaders vacibdir
+    fetch(apiUrl(`/api/sites/${siteId}/history`), { headers: { ...authHeaders() } })
+      .then(res => (res.ok ? res.json() : []))
       .then((history: CheckHistory[]) => {
-        // Son 24 saatlık dataları filtrələ
+        if (!Array.isArray(history)) { setData([]); setLoading(false); return; }
+        // Son 24 saatlıq dataları filtrələ
         const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
         const filtered = history
           .filter(h => new Date(h.checked_at + 'Z').getTime() > oneDayAgo)
           .reverse();
-        setData(filtered);
+        // Əgər son 24 saatda data azdırsa, bütün mövcud tarixçəni göstər (boş qrafik olmasın)
+        setData(filtered.length > 0 ? filtered : [...history].reverse());
         setLoading(false);
       })
       .catch(() => setLoading(false));

@@ -214,15 +214,15 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
 
   const fetchIncidents = async () => {
     try {
-      const res = await fetch(apiUrl(`/api/sites/${site.id}/incidents`));
-      setIncidents(await res.json());
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/incidents`), { headers: { ...authHeaders() } });
+      if (res.ok) setIncidents(await res.json());
     } catch {}
   };
 
   const fetchReport = async () => {
     try {
-      const res = await fetch(apiUrl(`/api/sites/${site.id}/report`));
-      setReport(await res.json());
+      const res = await fetch(apiUrl(`/api/sites/${site.id}/report`), { headers: { ...authHeaders() } });
+      if (res.ok) setReport(await res.json());
     } catch {}
   };
 
