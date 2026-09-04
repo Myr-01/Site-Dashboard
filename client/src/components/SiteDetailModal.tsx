@@ -9,6 +9,7 @@ import { COLOR_TAGS } from '../colorTags';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface SiteDetailModalProps {
   site: Site;
@@ -124,6 +125,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
   const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const [intervalSaving, setIntervalSaving] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   // Block body scroll when modal is open
   useEffect(() => {
@@ -428,6 +430,7 @@ export default function SiteDetailModal({ site: initialSite, onClose, onDelete }
       onClick={handleClose}
     >
       <div
+        ref={trapRef}
         role="dialog" aria-modal="true" aria-label={`${site.name} — sayt detalları`}
         // h-[85vh] (max-h yox) — modalın hündürlüyü tabdan taba dəyişməsin
         className={`bg-navy-surface border border-border rounded-2xl w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden transition-[transform,opacity] duration-200 ${
@@ -1226,6 +1229,7 @@ function EditFieldModal({
   const [isClosing2, setIsClosing2] = useState(false);
   const enterVis2 = useEnterAnimation();
   const visible = enterVis2 && !isClosing2;
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   const close = () => { setIsClosing2(true); setTimeout(onClose, 200); };
   const save = async () => { setLoading(true); await onSave(val); setLoading(false); };
@@ -1236,6 +1240,7 @@ function EditFieldModal({
       onClick={close}
     >
       <div
+        ref={trapRef}
         role="dialog" aria-modal="true"
         className={`w-full max-w-sm mx-4 rounded-2xl border border-accent/20 shadow-2xl shadow-accent/10 transition-[transform,opacity] duration-200 overflow-hidden ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'}`}
         style={{ background: 'linear-gradient(135deg, #14213d 0%, #1d2d4f 100%)' }}

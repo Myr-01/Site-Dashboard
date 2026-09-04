@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { loginWithPassword } from '../useAuth';
 
 interface AuthModalProps {
@@ -19,6 +20,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
   const enterVisible = useEnterAnimation();
   const isVisible = enterVisible && !isClosing;
   const inputRef = useRef<HTMLInputElement>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -72,6 +74,7 @@ export default function AuthModal({ onSuccess, onClose }: AuthModalProps) {
       onClick={handleClose}
     >
       <div
+        ref={trapRef}
         role="dialog" aria-modal="true" aria-label="Admin girişi"
         className={`bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl transition-[transform,opacity] duration-200 ${
           isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-2'

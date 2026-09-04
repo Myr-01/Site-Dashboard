@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { setSensitiveCode } from '../api';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface PasscodeModalProps {
   onSuccess: () => void;
@@ -14,12 +15,18 @@ interface PasscodeModalProps {
 export default function PasscodeModal({ onSuccess, onClose, title }: PasscodeModalProps) {
   const [code, setCode] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 100);
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, [onClose]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +43,7 @@ export default function PasscodeModal({ onSuccess, onClose, title }: PasscodeMod
       onClick={onClose}
     >
       <div
+        ref={trapRef}
         role="dialog" aria-modal="true" aria-label="Giriş kodu"
         className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-sm shadow-2xl"
         onClick={(e) => e.stopPropagation()}

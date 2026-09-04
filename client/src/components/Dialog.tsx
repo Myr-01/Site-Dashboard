@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useEnterAnimation } from '../hooks/useEnterAnimation';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 /* =============================================
    Universal Dialog Component
@@ -67,6 +68,7 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
   const enterVisible = useEnterAnimation();
   const visible = enterVisible && !isClosing;
   const [showPass, setShowPass] = useState(false);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
   const close = (val: string | boolean | null) => {
     setIsClosing(true);
@@ -93,6 +95,11 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
       onClick={() => { if (isAlert) close(true); else handleCancel(); }}
     >
       <div
+        ref={trapRef}
+        role={config.type === 'alert' ? 'alertdialog' : 'dialog'}
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        aria-describedby="dialog-message"
         className={`w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl transition-[transform,opacity] duration-200 ${visible ? 'scale-100 translate-y-0' : 'scale-95 translate-y-3'}`}
         style={{
           background: 'linear-gradient(160deg, #14213d 0%, #1a2a4a 100%)',
@@ -127,11 +134,11 @@ function DialogModal({ config, onResolve }: { config: DialogConfig; onResolve: (
                 </svg>
               )}
             </div>
-            <h3 className="text-white font-heading font-semibold text-base">
+            <h3 id="dialog-title" className="text-white font-heading font-semibold text-base">
               {config.title || (config.type === 'password' ? 'Admin Girişi' : config.type === 'confirm' ? 'Təsdiq' : config.type === 'prompt' ? 'Redaktə' : 'Məlumat')}
             </h3>
           </div>
-          <p className="text-text-muted text-sm leading-relaxed">{config.message}</p>
+          <p id="dialog-message" className="text-text-muted text-sm leading-relaxed">{config.message}</p>
         </div>
 
         {/* Input (prompt / password) */}

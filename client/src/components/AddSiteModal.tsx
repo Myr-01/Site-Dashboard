@@ -2,6 +2,7 @@
 import { authHeaders } from '../useAuth';
 import { apiUrl, sensitiveHeaders, clearSensitiveCode } from '../api';
 import { COLOR_TAGS } from '../colorTags';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import PasscodeModal from './PasscodeModal';
 
 interface AddSiteModalProps {
@@ -17,14 +18,18 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPasscode, setShowPasscode] = useState(false);
+  const trapRef = useFocusTrap<HTMLDivElement>(!showPasscode);
 
-  // Block body scroll when modal is open
+  // Block body scroll when modal is open + Escape to close
   useEffect(() => {
     document.body.style.overflow = 'hidden';
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleEsc);
     return () => {
       document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleEsc);
     };
-  }, []);
+  }, [onClose]);
 
   const submitSite = async () => {
     setLoading(true);
@@ -78,8 +83,8 @@ export default function AddSiteModal({ onClose, onAdded }: AddSiteModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="add-site-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4" onClick={onClose}>
+      <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby="add-site-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 id="add-site-title" className="text-xl font-heading font-bold text-white mb-6">Sayt Əlavə Et</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

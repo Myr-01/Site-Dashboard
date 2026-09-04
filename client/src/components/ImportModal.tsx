@@ -1,6 +1,7 @@
 ﻿import { useState, useRef, useEffect } from 'react';
 import { authHeaders } from '../useAuth';
 import { apiUrl } from '../api';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface ImportModalProps {
   onClose: () => void;
@@ -12,14 +13,18 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
   const [result, setResult] = useState<{ success: number; errors: number; total: number } | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const trapRef = useFocusTrap<HTMLDivElement>();
 
-  // Block body scroll when modal is open
+  // Block body scroll when modal is open + Escape to close
   useEffect(() => {
     document.body.style.overflow = 'hidden';
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleEsc);
     return () => {
       document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleEsc);
     };
-  }, []);
+  }, [onClose]);
 
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0];
@@ -55,8 +60,8 @@ export default function ImportModal({ onClose, onImported }: ImportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="import-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[1000] p-4" onClick={onClose}>
+      <div ref={trapRef} role="dialog" aria-modal="true" aria-labelledby="import-title" className="bg-navy-surface border border-border rounded-2xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
         <h2 id="import-title" className="text-xl font-heading font-bold text-white mb-4">CSV-dən Sayt İdxalı</h2>
         <p className="text-text-muted text-sm mb-4">
           CSV faylında bu sütunlar olmalıdır: <code className="text-accent">name</code>, <code className="text-accent">url</code>

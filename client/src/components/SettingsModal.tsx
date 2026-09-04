@@ -9,6 +9,7 @@ import {
 } from '../pushNotifications';
 import { dialog } from './Dialog';
 import { apiUrl } from '../api';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -41,13 +42,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [testLoading, setTestLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Block body scroll when modal is open
+  const trapRef = useFocusTrap<HTMLDivElement>();
+
+  // Block body scroll when modal is open + Escape to close
   useEffect(() => {
     document.body.style.overflow = 'hidden';
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleEsc);
     return () => {
       document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleEsc);
     };
-  }, []);
+  }, [onClose]);
   useEffect(() => {
     fetch(apiUrl('/api/settings/email'))
       .then(res => res.json())
@@ -149,6 +155,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       onClick={onClose}
     >
       <div 
+        ref={trapRef}
         role="dialog" aria-modal="true" aria-label="Parametrlər"
         className="bg-navy-surface border border-border rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
